@@ -6,8 +6,6 @@ const state = {
   query: '',
   results: [],
   selected: new Map(), // key: PackageIdentifier, value: pkg object
-  usingSample: true,
-  sample: [],
   browseAll: false,
   listOffset: 0,
   loadingResults: false,
@@ -32,25 +30,13 @@ function debounce(fn, ms = 250) {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
-async function ensureSampleLoaded() {
-  if (!state.sample.length) {
-    try {
-      const res = await fetch('data/index.json', { cache: 'no-store' });
-      const data = await res.json();
-      state.sample = Array.isArray(data) ? data : (data.items || []);
-    } catch (e) {
-      console.error('Failed to load local index data', e);
-      state.sample = [];
-    }
-  }
-}
+// No local fallback: frontend requires API now
 
 async function detectApiBase() {
   try {
     const saved = localStorage.getItem('apiBase');
     if (saved) {
       state.apiBase = saved;
-      state.usingSample = !state.apiBase;
       return;
     }
   } catch {}
@@ -68,7 +54,6 @@ async function detectApiBase() {
         const res = await fetch(healthUrl, { cache: 'no-store' });
         if (res.ok) {
           state.apiBase = base;
-          state.usingSample = false;
           try { localStorage.setItem('apiBase', base); } catch {}
           return;
         }
@@ -76,7 +61,6 @@ async function detectApiBase() {
     }
   } catch {}
   state.apiBase = '';
-  state.usingSample = true;
 }
 
 async function searchPackages(query) {
@@ -103,18 +87,15 @@ async function searchPackages(query) {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       state.results = rankResults(normalizeApiResults(data), state.query, 50);
-      state.usingSample = false;
     } catch (e) {
-      console.warn('API search failed; falling back to local index data.', e);
+      console.warn('API search failed; no fallback (frontend requires API).', e);
       state.apiBase = '';
       try { localStorage.setItem('apiBase', ''); } catch {}
-      state.usingSample = true;
-      await ensureSampleLoaded();
-      state.results = filterSample(state.sample, state.query);
+      state.results = [];
     }
   } else {
-    await ensureSampleLoaded();
-    state.results = filterSample(state.sample, state.query);
+    // No API configured; no results
+    state.results = [];
   }
 
   renderResults();
@@ -143,27 +124,17 @@ async function listAll(reset = false) {
       state.results = state.results.concat(items.map(normalizePackage));
       state.listOffset += items.length;
       state.hasMore = items.length === limit;
-      state.usingSample = false;
     } else {
-      // Use local index data with simple pagination
-      await ensureSampleLoaded();
-      const slice = state.sample.slice(offset, offset + limit);
-      state.results = state.results.concat(slice.map(normalizePackage));
-      state.listOffset += slice.length;
-      state.hasMore = state.listOffset < state.sample.length;
+      // No API configured; nothing to list
+      state.hasMore = false;
     }
   } catch (e) {
     console.warn('List all failed', e);
     if (state.apiBase) {
-      // fall back to local index if API not ready
+      // No fallback: clear API and stop listing
       state.apiBase = '';
       try { localStorage.setItem('apiBase', ''); } catch {}
-      state.usingSample = true;
-      await ensureSampleLoaded();
-      const slice = state.sample.slice(offset, offset + limit);
-      state.results = state.results.concat(slice.map(normalizePackage));
-      state.listOffset += slice.length;
-      state.hasMore = state.listOffset < state.sample.length;
+      state.hasMore = false;
     }
   }
   state.loadingResults = false;
@@ -234,9 +205,7 @@ function rankResults(pkgs, q, limit = 50) {
   return scored.slice(0, limit).map((x) => x[1]);
 }
 
-function filterSample(all, q, limit = 50) {
-  return rankResults(all, q, limit);
-}
+// No local sample filtering anymore
 
 function renderResults() {
   const c = elements.results;

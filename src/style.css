@@ -24,10 +24,10 @@ header { padding-top: 20px; }
 h1 { margin: 0 0 6px; font-size: 28px; }
 .subtitle { margin: 0; color: var(--muted); }
 
-.config details { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
-.config-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 8px; }
-.config label { display: flex; flex-direction: column; gap: 6px; }
-.config input { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); padding: 10px; border-radius: 8px; }
+.config details {}
+.config-grid {}
+.config label {}
+.config input {}
 .hint { color: var(--muted); }
 .small { font-size: 12px; }
 
@@ -63,7 +63,7 @@ h1 { margin: 0 0 6px; font-size: 28px; }
 .export { display: grid; gap: 8px; }
 .command { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 8px; margin: 0; font-size: 12px; }
 
-.footer { display: flex; align-items: center; justify-content: space-between; color: var(--muted); }
+.footer {}
 
 /* Export button uses default .btn styling for consistency */
 

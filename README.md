@@ -7,8 +7,7 @@ What’s included
 ---------------
 
 - Static frontend (no build step): `index.html`, `src/app.js`, `src/style.css`.
-- Local index dataset: `data/index.json`.
-- Uses local index data (no external API required).
+- Requires a running API; the frontend no longer falls back to local data.
 
 Running locally
 ---------------
@@ -35,7 +34,7 @@ npm start
 curl -X POST http://localhost:5173/api/sync
 ```
 
-3) Note: the frontend demo uses the local `data/index.json` and does not call the API unless available. You can interact with the API separately for your own integrations.
+3) The frontend requires the API. If `/api/health` is unavailable, search and browse will be empty.
 
 Offline/local clone
 -------------------
@@ -82,7 +81,7 @@ Usage
 API integration
 ---------------
 
-The included server exposes endpoints you can use in your own tools or a customized frontend. The demo UI ships without API configuration and relies on the generated local index dataset.
+The included server exposes endpoints you can use in your own tools or a customized frontend. Build the index via the server first so the API can serve real packages.
 
 winget import schema
 --------------------
