@@ -81,9 +81,12 @@ async function detectApiBase() {
 async function searchPackages(query) {
   state.query = query.trim();
   if (!state.query) {
-    // Empty search switches back to browse-all mode without clearing
+    // Empty search shows browse-all list
     state.browseAll = true;
-    renderResults();
+    state.results = [];
+    state.listOffset = 0;
+    state.hasMore = false;
+    listAll(true);
     return;
   } else {
     state.browseAll = false;
@@ -240,7 +243,7 @@ function renderResults() {
   if (!state.query && !state.browseAll) {
     const div = document.createElement('div');
     div.className = 'empty';
-    div.textContent = 'Loading packages…';
+    div.textContent = 'Start typing to search packages…';
     c.appendChild(div);
     return;
   }
