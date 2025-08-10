@@ -86,7 +86,32 @@ async function searchPackages(query) {
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      state.results = rankResults(normalizeApiResults(data), state.query, 50);
+      let items = normalizeApiResults(data);
+      // If no results, try condensed query (strip spaces/punctuation)
+      const condensed = normalizeCondensed(state.query);
+      if ((!items || items.length === 0) && condensed && condensed !== state.query.toLowerCase()) {
+        try {
+          const url2 = new URL('/api/search', state.apiBase);
+          url2.searchParams.set('q', condensed);
+          url2.searchParams.set('limit', '50');
+          const res2 = await fetch(url2.toString());
+          if (res2.ok) {
+            const data2 = await res2.json();
+            const items2 = normalizeApiResults(data2);
+            items = (items || []).concat(items2 || []);
+          }
+        } catch {}
+      }
+      // Deduplicate by PackageIdentifier
+      const seen = new Set();
+      const merged = [];
+      for (const p of items || []) {
+        const pid = (p.PackageIdentifier || '').toLowerCase();
+        if (!pid || seen.has(pid)) continue;
+        seen.add(pid);
+        merged.push(p);
+      }
+      state.results = rankResults(merged, state.query, 50);
     } catch (e) {
       console.warn('API search failed; no fallback (frontend requires API).', e);
       state.apiBase = '';
@@ -161,24 +186,42 @@ function normalizePackage(pkg) {
   };
 }
 
+function normalizeCondensed(s) { return (s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
 function scoreMatch(pkg, needle) {
   const name = (pkg.Name || '').toLowerCase();
   const id = (pkg.PackageIdentifier || '').toLowerCase();
   const desc = (pkg.Description || '').toLowerCase();
+  const needleCond = normalizeCondensed(needle);
+  const nameCond = normalizeCondensed(name);
+  const idCond = normalizeCondensed(id);
+  const descCond = normalizeCondensed(desc);
   // No match in any of the important fields
-  if (!name.includes(needle) && !id.includes(needle) && !desc.includes(needle)) return null;
+  const anyDirect = name.includes(needle) || id.includes(needle) || desc.includes(needle);
+  const anyCondensed = (!!needleCond && (nameCond.includes(needleCond) || idCond.includes(needleCond) || descCond.includes(needleCond)));
+  if (!anyDirect && !anyCondensed) return null;
   let score = 0;
   // Prioritize Name, then ID, then Description
   if (name) {
     if (name.startsWith(needle)) score = Math.max(score, 100 - (name.indexOf(needle) || 0));
     else if (name.includes(needle)) score = Math.max(score, 90 - name.indexOf(needle));
+    // Condensed matching (e.g., "explorer patcher" -> "ExplorerPatcher")
+    if (needleCond) {
+      if (nameCond.startsWith(needleCond)) score = Math.max(score, 88 - (nameCond.indexOf(needleCond) || 0));
+      else if (nameCond.includes(needleCond)) score = Math.max(score, 85 - nameCond.indexOf(needleCond));
+    }
   }
   if (id) {
     if (id.startsWith(needle)) score = Math.max(score, 80 - (id.indexOf(needle) || 0));
     else if (id.includes(needle)) score = Math.max(score, 70 - id.indexOf(needle));
+    if (needleCond) {
+      if (idCond.startsWith(needleCond)) score = Math.max(score, 68 - (idCond.indexOf(needleCond) || 0));
+      else if (idCond.includes(needleCond)) score = Math.max(score, 65 - idCond.indexOf(needleCond));
+    }
   }
-  if (desc && desc.includes(needle)) {
-    score = Math.max(score, 60 - desc.indexOf(needle));
+  if (desc) {
+    if (desc.includes(needle)) score = Math.max(score, 60 - desc.indexOf(needle));
+    if (needleCond && descCond.includes(needleCond)) score = Math.max(score, 55 - descCond.indexOf(needleCond));
   }
   return score;
 }
