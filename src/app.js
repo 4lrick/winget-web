@@ -15,6 +15,10 @@ const state = {
   searchVisibleCount: 5,
   searchOffset: 0,
   searchTotal: 0,
+  searchingMore: false,
+  searchExhausted: false,
+  lastSearchPageSize: 0,
+  searchVisibleIds: [],
 };
 
 const elements = {
@@ -79,6 +83,7 @@ async function searchPackages(query) {
   } else {
     state.browseAll = false;
     state.searchVisibleCount = state.pageSize;
+    state.searchVisibleIds = [];
   }
 
   if (state.apiBase) {
@@ -86,6 +91,7 @@ async function searchPackages(query) {
       state.searchOffset = 0;
       state.searchTotal = 0;
       state.rawResults = [];
+      state.searchExhausted = false;
       const url = new URL('/api/search', state.apiBase);
       url.searchParams.set('q', state.query);
       url.searchParams.set('limit', '50');
@@ -96,6 +102,12 @@ async function searchPackages(query) {
       const items = normalizeApiResults(data);
       state.searchTotal = Number(data.total || items.length || 0);
       state.searchOffset += items.length;
+      state.lastSearchPageSize = items.length;
+      if (items.length === 0) {
+        // Prevent infinite "Show more" when API yields no further items
+        state.searchOffset = state.searchTotal;
+        state.searchExhausted = true;
+      }
       state.rawResults = items.slice();
       state.results = rankResults(state.rawResults, state.query, state.rawResults.length);
     } catch (e) {
@@ -236,6 +248,54 @@ function rankResults(pkgs, q, limit = 50) {
 
 // No local sample filtering anymore
 
+// Top-level search pagination helper used by the UI button
+async function fetchMoreSearch() {
+  if (!state.apiBase) return;
+  if (state.searchOffset >= state.searchTotal || state.searchingMore || state.searchExhausted) return;
+  state.searchingMore = true;
+  try {
+    let added = 0;
+    let safety = 0;
+    while (state.searchOffset < state.searchTotal && added === 0 && safety < 5) {
+      const url = new URL('/api/search', state.apiBase);
+      url.searchParams.set('q', state.query);
+      url.searchParams.set('limit', '50');
+      url.searchParams.set('offset', String(state.searchOffset));
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const items = normalizeApiResults(data);
+      state.searchTotal = Number(data.total || state.searchTotal);
+      state.searchOffset += items.length;
+      state.lastSearchPageSize = items.length;
+      if (items.length === 0) {
+        state.searchOffset = state.searchTotal;
+        state.searchExhausted = true;
+        break;
+      }
+      const seen = new Set(state.rawResults.map((p) => (p.PackageIdentifier || '').toLowerCase()));
+      for (const p of items) {
+        const pid = (p.PackageIdentifier || '').toLowerCase();
+        if (!pid || seen.has(pid)) continue;
+        seen.add(pid);
+        state.rawResults.push(p);
+        added++;
+      }
+      safety++;
+    }
+    if (added === 0) {
+      state.searchOffset = state.searchTotal;
+      state.searchExhausted = true;
+    }
+    state.results = rankResults(state.rawResults, state.query, state.rawResults.length);
+    renderResults();
+  } catch (e) {
+    console.warn('Search more failed', e);
+  } finally {
+    state.searchingMore = false;
+  }
+}
+
 function renderResults() {
   const c = elements.results;
   c.innerHTML = '';
@@ -264,7 +324,28 @@ function renderResults() {
     return;
   }
   c.classList.remove('is-empty');
-  const visible = state.browseAll ? state.results : state.results.slice(0, state.searchVisibleCount);
+  let visible;
+  if (state.browseAll) {
+    visible = state.results;
+  } else {
+    // Preserve previously revealed items, and append next best-ranked ones
+    const idOf = (p) => (p.PackageIdentifier || '').toLowerCase();
+    const byId = new Map(state.results.map((p) => [idOf(p), p]));
+    // Ensure searchVisibleIds contains only ids present in results
+    state.searchVisibleIds = state.searchVisibleIds.filter((id) => byId.has(id));
+    const need = Math.max(0, state.searchVisibleCount - state.searchVisibleIds.length);
+    if (need > 0) {
+      for (const p of state.results) {
+        const id = idOf(p);
+        if (!state.searchVisibleIds.includes(id)) {
+          state.searchVisibleIds.push(id);
+          if (state.searchVisibleIds.length >= state.searchVisibleCount) break;
+        }
+      }
+    }
+    // Build visible list in the stable order they were revealed
+    visible = state.searchVisibleIds.map((id) => byId.get(id)).filter(Boolean);
+  }
   for (const pkg of visible) {
     const item = document.createElement('div');
     item.className = 'result-item';
@@ -332,16 +413,19 @@ function renderResults() {
   }
 
   // Show more for search mode (reveal or fetch next page)
-  if (!state.browseAll && (state.results.length > state.searchVisibleCount || state.searchOffset < state.searchTotal)) {
+  const canReveal = state.results.length > state.searchVisibleCount;
+  const canFetchMore = (!state.searchExhausted && !state.searchingMore) && (state.searchOffset < state.searchTotal || state.lastSearchPageSize === 50);
+  if (!state.browseAll && (canReveal || canFetchMore)) {
     const moreWrap = document.createElement('div');
     moreWrap.style.padding = '12px';
     const btn = document.createElement('button');
     btn.className = 'btn secondary';
-    btn.textContent = 'Show more';
+    btn.textContent = state.searchingMore ? 'Loading…' : 'Show more';
+    btn.disabled = state.searchingMore;
     btn.addEventListener('click', () => {
       // If we've revealed all buffered results but the server has more, fetch next page first
-      if (state.searchVisibleCount >= state.results.length && state.searchOffset < state.searchTotal) {
-        searchMore().then(() => {
+      if (state.searchVisibleCount >= state.results.length && (state.searchOffset < state.searchTotal || state.lastSearchPageSize === 50)) {
+        fetchMoreSearch().then(() => {
           state.searchVisibleCount += state.pageSize;
           renderResults();
         });
@@ -531,30 +615,50 @@ async function main() {
   restoreFromUrl();
 async function searchMore() {
   if (!state.apiBase) return;
-  if (state.searchOffset >= state.searchTotal) return;
+  if (state.searchOffset >= state.searchTotal || state.searchingMore || state.searchExhausted) return;
+  state.searchingMore = true;
   try {
-    const url = new URL('/api/search', state.apiBase);
-    url.searchParams.set('q', state.query);
-    url.searchParams.set('limit', '50');
-    url.searchParams.set('offset', String(state.searchOffset));
-    const res = await fetch(url.toString());
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const items = normalizeApiResults(data);
-    state.searchTotal = Number(data.total || state.searchTotal);
-    state.searchOffset += items.length;
-    // Deduplicate by PackageIdentifier when appending
-    const seen = new Set(state.rawResults.map((p) => (p.PackageIdentifier || '').toLowerCase()));
-    for (const p of items) {
-      const pid = (p.PackageIdentifier || '').toLowerCase();
-      if (!pid || seen.has(pid)) continue;
-      seen.add(pid);
-      state.rawResults.push(p);
+    let added = 0;
+    let safety = 0;
+    while (state.searchOffset < state.searchTotal && added === 0 && safety < 5) {
+      const url = new URL('/api/search', state.apiBase);
+      url.searchParams.set('q', state.query);
+      url.searchParams.set('limit', '50');
+      url.searchParams.set('offset', String(state.searchOffset));
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const items = normalizeApiResults(data);
+      state.searchTotal = Number(data.total || state.searchTotal);
+      state.searchOffset += items.length;
+      state.lastSearchPageSize = items.length;
+      if (items.length === 0) {
+        // Exhausted
+        state.searchOffset = state.searchTotal;
+        state.searchExhausted = true;
+        break;
+      }
+      const seen = new Set(state.rawResults.map((p) => (p.PackageIdentifier || '').toLowerCase()));
+      for (const p of items) {
+        const pid = (p.PackageIdentifier || '').toLowerCase();
+        if (!pid || seen.has(pid)) continue;
+        seen.add(pid);
+        state.rawResults.push(p);
+        added++;
+      }
+      safety++;
+    }
+    if (added === 0) {
+      // No new unique results found after fetching; mark exhausted
+      state.searchOffset = state.searchTotal;
+      state.searchExhausted = true;
     }
     state.results = rankResults(state.rawResults, state.query, state.rawResults.length);
     renderResults();
   } catch (e) {
     console.warn('Search more failed', e);
+  } finally {
+    state.searchingMore = false;
   }
 }
   await hydrateSelectedFromApi();
