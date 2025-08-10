@@ -105,9 +105,13 @@ export function searchIndex(index, q, limit = 50, offset = 0) {
   const needle = (q || '').trim().toLowerCase();
   const needleCond = needle.replace(/[^a-z0-9]/g, '');
   let arr = index.items;
+  
   if (needle) {
+    console.log(`Searching for: "${needle}"`);
+    
     // Split query into individual words for better multi-word search
     const queryWords = needle.split(/\s+/).filter(word => word.length > 0);
+    console.log(`Query words:`, queryWords);
     
     arr = arr.filter((p) => {
       const searchableFields = [
@@ -123,23 +127,45 @@ export function searchIndex(index, q, limit = 50, offset = 0) {
         .toLowerCase();
       
       // Check if the full query matches (original behavior)
-      if (searchableFields.includes(needle)) return true;
-      
-      // Check if each individual word matches any field
-      if (queryWords.length > 1) {
-        const allWordsMatch = queryWords.every(word => {
-          // Check if this word appears in any of the searchable fields
-          return searchableFields.includes(word);
-        });
-        if (allWordsMatch) return true;
+      if (searchableFields.includes(needle)) {
+        console.log(`Full match for: ${p.PackageIdentifier}`);
+        return true;
       }
       
-      // Check condensed matching (original behavior)
-      if (!needleCond) return false;
-      const condensed = searchableFields.replace(/[^a-z0-9]/g, '');
-      return condensed.includes(needleCond);
+      // Check if each individual word matches any field (for both single and multi-word queries)
+      const allWordsMatch = queryWords.every(word => {
+        // Check if this word appears in any of the searchable fields
+        return searchableFields.includes(word);
+      });
+      
+      if (allWordsMatch) {
+        console.log(`Word match for: ${p.PackageIdentifier}`);
+        return true;
+      }
+      
+      // Check condensed matching (original behavior) - but be more strict
+      if (needleCond && needleCond.length > 2) { // Only use condensed matching for queries longer than 2 chars
+        const condensed = searchableFields.replace(/[^a-z0-9]/g, '');
+        // Only match if the condensed query appears as a word boundary or at the start
+        if (condensed.includes(needleCond)) {
+          // Additional check: make sure it's not just a substring of a longer word
+          const beforeChar = condensed[condensed.indexOf(needleCond) - 1];
+          const afterChar = condensed[condensed.indexOf(needleCond) + needleCond.length];
+          // Only match if it's at word boundaries (not preceded/followed by alphanumeric chars)
+          if ((!beforeChar || !/[a-z0-9]/.test(beforeChar)) && 
+              (!afterChar || !/[a-z0-9]/.test(afterChar))) {
+            console.log(`Condensed match for: ${p.PackageIdentifier}`);
+            return true;
+          }
+        }
+      }
+      
+      return false;
     });
+    
+    console.log(`Found ${arr.length} matching packages`);
   }
+  
   const total = arr.length;
   const slice = arr.slice(offset, offset + limit);
   return { total, items: slice };

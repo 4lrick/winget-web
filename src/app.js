@@ -230,26 +230,86 @@ function scoreMatch(pkg, needle) {
   
   // Prioritize Name, then ID, then Description (original scoring)
   if (name) {
-    if (name.startsWith(needle)) score = Math.max(score, 100 - (name.indexOf(needle) || 0));
-    else if (name.includes(needle)) score = Math.max(score, 90 - name.indexOf(needle));
+    // Exact match gets highest priority
+    if (name === needle) score = Math.max(score, 300); // Increased from 200 to 300
+    // Starts with gets high priority, but shorter names get bonus
+    else if (name.startsWith(needle)) {
+      const nameLength = name.length;
+      const lengthBonus = Math.max(0, 40 - nameLength); // Reduced from 60 to 40
+      score = Math.max(score, 140 - (name.indexOf(needle) || 0) + lengthBonus);
+    }
+    // Contains gets medium priority, but shorter names get bonus
+    else if (name.includes(needle)) {
+      const nameLength = name.length;
+      const lengthBonus = Math.max(0, 30 - nameLength); // Reduced from 50 to 30
+      score = Math.max(score, 90 - name.indexOf(needle) + lengthBonus);
+    }
     // Condensed matching (e.g., "explorer patcher" -> "ExplorerPatcher")
     if (needleCond) {
-      if (nameCond.startsWith(needleCond)) score = Math.max(score, 88 - (nameCond.indexOf(needleCond) || 0));
-      else if (nameCond.includes(needleCond)) score = Math.max(score, 85 - nameCond.indexOf(needleCond));
+      if (nameCond.startsWith(needleCond)) {
+        const nameLength = nameCond.length;
+        const lengthBonus = Math.max(0, 25 - nameLength); // Reduced from 40 to 25
+        score = Math.max(score, 85 - (nameCond.indexOf(needleCond) || 0) + lengthBonus);
+      }
+      else if (nameCond.includes(needleCond)) {
+        const nameLength = nameCond.length;
+        const lengthBonus = Math.max(0, 20 - nameLength); // Reduced from 30 to 20
+        score = Math.max(score, 80 - nameCond.indexOf(needleCond) + lengthBonus);
+      }
     }
   }
   if (id) {
-    if (id.startsWith(needle)) score = Math.max(score, 80 - (id.indexOf(needle) || 0));
-    else if (id.includes(needle)) score = Math.max(score, 70 - id.indexOf(needle));
+    // Exact match gets high priority
+    if (id === needle) score = Math.max(score, 250); // Increased from 180 to 250
+    // Starts with gets high priority, but shorter IDs get bonus
+    else if (id.startsWith(needle)) {
+      const idLength = id.length;
+      const lengthBonus = Math.max(0, 30 - idLength); // Reduced from 50 to 30
+      score = Math.max(score, 120 - (id.indexOf(needle) || 0) + lengthBonus);
+    }
+    // Contains gets medium priority, but shorter IDs get bonus
+    else if (id.includes(needle)) {
+      const idLength = id.length;
+      const lengthBonus = Math.max(0, 25 - idLength); // Reduced from 40 to 25
+      score = Math.max(score, 75 - id.indexOf(needle) + lengthBonus);
+    }
     if (needleCond) {
-      if (idCond.startsWith(needleCond)) score = Math.max(score, 68 - (idCond.indexOf(needleCond) || 0));
-      else if (idCond.includes(needleCond)) score = Math.max(score, 65 - idCond.indexOf(needleCond));
+      if (idCond.startsWith(needleCond)) {
+        const idLength = idCond.length;
+        const lengthBonus = Math.max(0, 20 - idLength); // Reduced from 35 to 20
+        score = Math.max(score, 65 - (idCond.indexOf(needleCond) || 0) + lengthBonus);
+      }
+      else if (idCond.includes(needleCond)) {
+        const idLength = idCond.length;
+        const lengthBonus = Math.max(0, 15 - idLength); // Reduced from 25 to 15
+        score = Math.max(score, 60 - idCond.indexOf(needleCond) + lengthBonus);
+      }
     }
   }
   if (desc) {
-    if (desc.includes(needle)) score = Math.max(score, 60 - desc.indexOf(needle));
-    if (needleCond && descCond.includes(needleCond)) score = Math.max(score, 55 - descCond.indexOf(needleCond));
+    if (desc.includes(needle)) {
+      const descLength = desc.length;
+      const lengthBonus = Math.max(0, 15 - descLength); // Reduced from 20 to 15
+      score = Math.max(score, 55 - desc.indexOf(needle) + lengthBonus);
+    }
+    if (needleCond && descCond.includes(needleCond)) {
+      const descLength = descCond.length;
+      const lengthBonus = Math.max(0, 10 - descLength); // Reduced from 15 to 10
+      score = Math.max(score, 50 - descCond.indexOf(needleCond) + lengthBonus);
+    }
   }
+  
+  // Bonus for packages from the same publisher as the main package
+  // This helps prioritize related packages (e.g., Valve.Steam, Valve.SteamLink)
+  if (publisher.includes('valve') && (name.includes('steam') || id.includes('steam'))) {
+    score += 20; // Increased from 15 to 20
+  }
+  
+  // Special bonus for the main Steam application
+  if (id === 'valve.steam' && name === 'steam') {
+    score += 50; // Extra bonus for the main Steam package
+  }
+  
   return score;
 }
 
@@ -698,3 +758,4 @@ async function searchMore() {
 }
 
 main();
+
