@@ -426,19 +426,23 @@ function download(filename, dataStr, mime = 'application/json') {
   URL.revokeObjectURL(url);
 }
 
-function exportJson() {
-  if (state.selected.size === 0) {
-    alert('No packages selected.');
-    return;
-  }
-  const data = buildWingetImportJson();
+function buildTimestampedFilename() {
   const ts = new Date()
     .toISOString()
     .replaceAll('-', '')
     .replaceAll(':', '')
     .replace('T', '-')
     .slice(0, 15);
-  const filename = `winget-web-${ts}.json`;
+  return `winget-web-${ts}.json`;
+}
+
+function exportJson() {
+  if (state.selected.size === 0) {
+    alert('No packages selected.');
+    return;
+  }
+  const data = buildWingetImportJson();
+  const filename = buildTimestampedFilename();
   download(filename, JSON.stringify(data, null, 2));
   elements.importCommand.textContent = `winget import --import-file "${filename}"`;
 }
@@ -446,7 +450,10 @@ function exportJson() {
 function updateCommand() {
   if (state.selected.size === 0) {
     elements.importCommand.textContent = 'winget import --import-file "winget-web-YYYYMMDD.json"';
+    return;
   }
+  const filename = buildTimestampedFilename();
+  elements.importCommand.textContent = `winget import --import-file "${filename}"`;
 }
 
 function syncUrl() {
