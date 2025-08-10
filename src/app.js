@@ -13,6 +13,7 @@ const state = {
   loadingResults: false,
   hasMore: false,
   pageSize: 5,
+  searchVisibleCount: 5,
 };
 
 const elements = {
@@ -86,6 +87,7 @@ async function searchPackages(query) {
     return;
   } else {
     state.browseAll = false;
+    state.searchVisibleCount = state.pageSize;
   }
 
   if (state.apiBase) {
@@ -228,8 +230,8 @@ function rankResults(pkgs, q, limit = 50) {
   return scored.slice(0, limit).map((x) => x[1]);
 }
 
-function filterSample(all, q) {
-  return rankResults(all, q, 50);
+function filterSample(all, q, limit = 50) {
+  return rankResults(all, q, limit);
 }
 
 function renderResults() {
@@ -256,7 +258,8 @@ function renderResults() {
     c.appendChild(div);
     return;
   }
-  for (const pkg of state.results) {
+  const visible = state.browseAll ? state.results : state.results.slice(0, state.searchVisibleCount);
+  for (const pkg of visible) {
     const item = document.createElement('div');
     item.className = 'result-item';
 
@@ -321,6 +324,21 @@ function renderResults() {
     btn.className = 'btn secondary';
     btn.textContent = 'Load more';
     btn.addEventListener('click', () => listAll(false));
+    moreWrap.appendChild(btn);
+    c.appendChild(moreWrap);
+  }
+
+  // Show more for search mode (client-side reveal)
+  if (!state.browseAll && state.results.length > state.searchVisibleCount) {
+    const moreWrap = document.createElement('div');
+    moreWrap.style.padding = '12px';
+    const btn = document.createElement('button');
+    btn.className = 'btn secondary';
+    btn.textContent = 'Show more';
+    btn.addEventListener('click', () => {
+      state.searchVisibleCount += state.pageSize;
+      renderResults();
+    });
     moreWrap.appendChild(btn);
     c.appendChild(moreWrap);
   }
