@@ -1,9 +1,7 @@
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-const defaultApi = (typeof location !== 'undefined' && /^https?:/i.test(location.protocol)) ? location.origin : '';
 const state = {
-  apiBase: localStorage.getItem('apiBase') || defaultApi,
   query: '',
   results: [],
   selected: new Map(), // key: PackageIdentifier, value: pkg object
@@ -15,7 +13,6 @@ const state = {
 };
 
 const elements = {
-  apiBase: $('#apiBase'),
   search: $('#searchInput'),
   results: $('#results'),
   selectedList: $('#selectedList'),
@@ -25,12 +22,6 @@ const elements = {
   importCommand: $('#importCommand'),
   browseAll: $('#browseAll'),
 };
-
-function setApiBase(url) {
-  state.apiBase = url.trim();
-  localStorage.setItem('apiBase', state.apiBase);
-  state.usingSample = !state.apiBase;
-}
 
 function debounce(fn, ms = 250) {
   let t;
@@ -60,27 +51,8 @@ async function searchPackages(query) {
     state.browseAll = false;
   }
 
-  if (state.apiBase) {
-    try {
-      const url = new URL('/api/search', state.apiBase);
-      url.searchParams.set('q', state.query);
-      url.searchParams.set('limit', '50');
-      const res = await fetch(url.toString());
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      state.results = normalizeApiResults(data);
-    } catch (e) {
-      console.warn('API search failed; falling back to sample data.', e);
-      state.apiBase = '';
-      localStorage.setItem('apiBase', '');
-      state.usingSample = true;
-      await ensureSampleLoaded();
-      state.results = filterSample(state.sample, state.query);
-    }
-  } else {
-    await ensureSampleLoaded();
-    state.results = filterSample(state.sample, state.query);
-  }
+  await ensureSampleLoaded();
+  state.results = filterSample(state.sample, state.query);
 
   renderResults();
 }
@@ -96,35 +68,13 @@ async function listAll(reset = false) {
   state.loadingResults = true;
   renderResults();
   try {
-    if (state.apiBase) {
-      const url = new URL('/api/list', state.apiBase);
-      url.searchParams.set('limit', String(limit));
-      url.searchParams.set('offset', String(offset));
-      const res = await fetch(url.toString());
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const items = (Array.isArray(data) ? data : data.items) || [];
-      state.results = state.results.concat(items.map(normalizePackage));
-      state.listOffset += limit;
-    } else {
-      // Sample fallback: just show all sample data paginated
-      await ensureSampleLoaded();
-      const slice = state.sample.slice(offset, offset + limit);
-      state.results = state.results.concat(slice.map(normalizePackage));
-      state.listOffset += slice.length;
-    }
+    // Use bundled sample data with simple pagination
+    await ensureSampleLoaded();
+    const slice = state.sample.slice(offset, offset + limit);
+    state.results = state.results.concat(slice.map(normalizePackage));
+    state.listOffset += slice.length;
   } catch (e) {
     console.warn('List all failed', e);
-    if (state.apiBase) {
-      // fall back to sample if API not ready
-      state.apiBase = '';
-      localStorage.setItem('apiBase', '');
-      state.usingSample = true;
-      await ensureSampleLoaded();
-      const slice = state.sample.slice(offset, offset + limit);
-      state.results = state.results.concat(slice.map(normalizePackage));
-      state.listOffset += slice.length;
-    }
   }
   state.loadingResults = false;
   renderResults();
@@ -354,14 +304,14 @@ function exportJson() {
     .replaceAll(':', '')
     .replace('T', '-')
     .slice(0, 15);
-  const filename = `winstall-${ts}.json`;
+  const filename = `winget-web-${ts}.json`;
   download(filename, JSON.stringify(data, null, 2));
   elements.importCommand.textContent = `winget import --import-file "${filename}"`;
 }
 
 function updateCommand() {
   if (state.selected.size === 0) {
-    elements.importCommand.textContent = 'winget import --import-file "winstall-YYYYMMDD.json"';
+    elements.importCommand.textContent = 'winget import --import-file "winget-web-YYYYMMDD.json"';
   }
 }
 
@@ -385,8 +335,6 @@ function restoreFromUrl() {
 }
 
 function bind() {
-  elements.apiBase.value = state.apiBase;
-  elements.apiBase.addEventListener('change', (e) => setApiBase(e.target.value));
   elements.search.addEventListener('input', debounce((e) => searchPackages(e.target.value), 250));
   elements.clearSelected.addEventListener('click', clearSelected);
   elements.exportJson.addEventListener('click', exportJson);

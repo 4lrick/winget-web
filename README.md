@@ -8,7 +8,7 @@ What’s included
 
 - Static frontend (no build step): `index.html`, `src/app.js`, `src/style.css`.
 - Local demo dataset: `data/sample-packages.json`.
-- Pluggable API base URL for live search.
+- Uses bundled sample data (no external API required).
 
 Running locally
 ---------------
@@ -35,7 +35,7 @@ npm start
 curl -X POST http://localhost:5173/api/sync
 ```
 
-3) The frontend will now use the local API by default. Use “Browse All” to page through the full list, or search.
+3) Note: the frontend demo uses bundled sample data and does not call the API. You can interact with the API separately for your own integrations.
 
 Offline/local clone
 -------------------
@@ -75,37 +75,14 @@ Usage
 
 - Search: type keywords to filter packages.
 - Add: click “Add” on results to build a selection.
-- Export: click “Export winget import JSON” to download a file like `winstall-20240101-1200.json` and use:
-  `winget import --import-file "winstall-20240101-1200.json"`
+- Export: click “Export winget import JSON” to download a file like `winget-web-20240101-1200.json` and use:
+  `winget import --import-file "winget-web-20240101-1200.json"`
 - Share: the URL encodes selected IDs (`?ids=Id1,Id2,...`).
 
 API integration
 ---------------
 
-Set the API Base URL in the “Data source” panel. The app calls:
-
-- `GET {API}/api/search?q=<query>&limit=50`
-
-Expected response shape (flexible):
-
-```
-{
-  "items": [
-    {
-      "PackageIdentifier": "Git.Git",
-      "Name": "Git",
-      "Publisher": "The Git Development Community",
-      "Description": "…",
-      "Version": "2.46.0",
-      "Tags": ["git", "vcs"],
-      "Homepage": "https://git-scm.com/"
-    },
-    ...
-  ]
-}
-```
-
-Or simply an array of objects. Fields are normalized by key fallbacks, so `id`/`name` also work.
+The included server exposes endpoints you can use in your own tools or a customized frontend. The demo UI ships without API configuration and relies solely on the bundled sample dataset.
 
 winget import schema
 --------------------
