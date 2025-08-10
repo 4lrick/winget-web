@@ -10,6 +10,7 @@ const state = {
   browseAll: false,
   listOffset: 0,
   loadingResults: false,
+  hasMore: false,
 };
 
 const elements = {
@@ -61,6 +62,7 @@ async function listAll(reset = false) {
   if (reset) {
     state.results = [];
     state.listOffset = 0;
+    state.hasMore = false;
   }
   state.browseAll = true;
   const limit = 50;
@@ -73,6 +75,7 @@ async function listAll(reset = false) {
     const slice = state.sample.slice(offset, offset + limit);
     state.results = state.results.concat(slice.map(normalizePackage));
     state.listOffset += slice.length;
+    state.hasMore = state.listOffset < state.sample.length;
   } catch (e) {
     console.warn('List all failed', e);
   }
@@ -203,7 +206,7 @@ function renderResults() {
   }
 
   // Load more for browse-all mode
-  if (state.browseAll) {
+  if (state.browseAll && state.hasMore) {
     const moreWrap = document.createElement('div');
     moreWrap.style.padding = '12px';
     const btn = document.createElement('button');
