@@ -557,22 +557,120 @@ function clearSelected() {
 
 function renderSelected() {
   elements.selectedList.innerHTML = '';
-  for (const [id, pkg] of state.selected) {
+  const selectedArray = Array.from(state.selected.entries());
+  
+  for (let i = 0; i < selectedArray.length; i++) {
+    const [id, pkg] = selectedArray[i];
     const li = document.createElement('li');
     li.className = 'selected-item';
+    li.draggable = true;
+    li.dataset.id = id;
+    li.dataset.index = i;
+    
+    // Drag handle
+    const dragHandle = document.createElement('div');
+    dragHandle.className = 'drag-handle';
+    dragHandle.innerHTML = '⋮⋮';
+    dragHandle.title = 'Drag to reorder';
+    
     const left = document.createElement('div');
     left.innerHTML = `<div>${pkg.Name || id}</div><div class="meta">${id}</div>`;
+    
     const right = document.createElement('div');
     const btn = document.createElement('button');
     btn.className = 'btn danger';
     btn.textContent = 'Remove';
     btn.addEventListener('click', () => removeSelected(id));
     right.appendChild(btn);
+    
+    li.appendChild(dragHandle);
     li.appendChild(left);
     li.appendChild(right);
+    
+    // Drag and drop event listeners
+    li.addEventListener('dragstart', handleDragStart);
+    li.addEventListener('dragover', handleDragOver);
+    li.addEventListener('drop', handleDrop);
+    li.addEventListener('dragend', handleDragEnd);
+    
     elements.selectedList.appendChild(li);
   }
   elements.selectedCount.textContent = String(state.selected.size);
+}
+
+// Drag and drop functionality for reordering selected packages
+let draggedElement = null;
+let draggedIndex = -1;
+
+function handleDragStart(e) {
+  draggedElement = this;
+  draggedIndex = parseInt(this.dataset.index);
+  this.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/html', this.outerHTML);
+}
+
+function handleDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  
+  const targetIndex = parseInt(this.dataset.index);
+  if (draggedIndex === targetIndex) return;
+  
+  // Remove existing drop indicators
+  elements.selectedList.querySelectorAll('.selected-item').forEach(item => {
+    item.classList.remove('drop-above', 'drop-below');
+  });
+  
+  // Add drop indicator
+  if (draggedIndex < targetIndex) {
+    this.classList.add('drop-below');
+  } else {
+    this.classList.add('drop-above');
+  }
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  
+  const targetIndex = parseInt(this.dataset.index);
+  if (draggedIndex === targetIndex) return;
+  
+  console.log(`Moving item from index ${draggedIndex} to ${targetIndex}`);
+  
+  // Reorder the selected packages
+  const selectedArray = Array.from(state.selected.entries());
+  const [draggedId] = selectedArray[draggedIndex];
+  
+  // Remove the dragged item
+  selectedArray.splice(draggedIndex, 1);
+  
+  // Insert at new position
+  selectedArray.splice(targetIndex, 0, [draggedId, state.selected.get(draggedId)]);
+  
+  // Rebuild the Map with new order
+  state.selected.clear();
+  for (const [id, pkg] of selectedArray) {
+    state.selected.set(id, pkg);
+  }
+  
+  console.log('New order:', Array.from(state.selected.keys()));
+  
+  // Re-render and update URL
+  renderSelected();
+  syncUrl();
+}
+
+function handleDragEnd(e) {
+  this.classList.remove('dragging');
+  
+  // Remove all drop indicators
+  elements.selectedList.querySelectorAll('.selected-item').forEach(item => {
+    item.classList.remove('drop-above', 'drop-below');
+  });
+  
+  draggedElement = null;
+  draggedIndex = -1;
 }
 
 function buildWingetImportJson() {

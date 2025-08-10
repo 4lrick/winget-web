@@ -51,8 +51,59 @@ h1 { margin: 0 0 6px; font-size: 28px; }
 .selected { position: sticky; top: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
 .selected-header { display: flex; align-items: center; justify-content: space-between; }
 .selected-list { list-style: none; margin: 12px 0; padding: 0; max-height: 380px; overflow: auto; border: 1px dashed var(--border); border-radius: 8px; }
-.selected-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 8px 10px; border-bottom: 1px dashed var(--border); }
+.selected-item { display: grid; grid-template-columns: 32px 1fr auto; gap: 8px; padding: 8px 10px; border-bottom: 1px dashed var(--border); cursor: move; }
 .selected-item:last-child { border-bottom: 0; }
+
+/* Drag and drop styles */
+.drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 36px;
+  color: var(--muted);
+  cursor: grab;
+  user-select: none;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  padding: 0;
+  margin: 0;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.drag-handle:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.selected-item.dragging {
+  opacity: 0.5;
+  transform: rotate(2deg);
+  z-index: 1000;
+  user-select: none;
+}
+
+.selected-item.drop-above {
+  border-top: 2px solid var(--brand);
+  margin-top: -2px;
+}
+
+.selected-item.drop-below {
+  border-bottom: 2px solid var(--brand);
+  margin-bottom: -2px;
+}
+
+.selected-item:hover {
+  background: var(--panel-2);
+}
 
 .export { display: grid; gap: 8px; }
 .command { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 8px; margin: 0; font-size: 12px; }
