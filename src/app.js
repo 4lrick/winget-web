@@ -299,24 +299,21 @@ function renderResults() {
     }
 
     const right = document.createElement('div');
-    const already = state.selected.has(pkg.PackageIdentifier);
-    const label = document.createElement('label');
-    label.className = 'meta';
-    label.style.display = 'flex';
-    label.style.alignItems = 'center';
-    label.style.gap = '8px';
-    const cb = document.createElement('input');
-    cb.type = 'checkbox';
-    cb.checked = already;
-    cb.addEventListener('change', () => {
-      if (cb.checked) addSelected(pkg);
-      else removeSelected(pkg.PackageIdentifier);
+    const btn = document.createElement('button');
+    const setBtnState = () => {
+      const already = state.selected.has(pkg.PackageIdentifier);
+      btn.className = already ? 'btn ok' : 'btn secondary';
+      btn.textContent = already ? 'Selected ✓' : 'Select';
+      btn.setAttribute('aria-pressed', already ? 'true' : 'false');
+    };
+    setBtnState();
+    btn.addEventListener('click', () => {
+      const exists = state.selected.has(pkg.PackageIdentifier);
+      if (exists) removeSelected(pkg.PackageIdentifier);
+      else addSelected(pkg);
+      setBtnState();
     });
-    const txt = document.createElement('span');
-    txt.textContent = already ? 'Selected' : 'Select';
-    label.appendChild(cb);
-    label.appendChild(txt);
-    right.appendChild(label);
+    right.appendChild(btn);
 
     item.appendChild(left);
     item.appendChild(right);

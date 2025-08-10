@@ -49,6 +49,8 @@ h1 { margin: 0 0 6px; font-size: 28px; }
 .btn.secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
 .btn.danger { background: var(--danger); }
 .btn.ok { background: var(--ok); }
+.btn.small { padding: 4px 8px; font-size: 12px; }
+.btn.pill { border-radius: 999px; }
 .link { background: transparent; color: var(--muted); border: none; cursor: pointer; }
 .link:hover { color: var(--text); }
 
