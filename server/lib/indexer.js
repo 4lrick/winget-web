@@ -106,8 +106,11 @@ export function searchIndex(index, q, limit = 50, offset = 0) {
   const needleCond = needle.replace(/[^a-z0-9]/g, '');
   let arr = index.items;
   if (needle) {
+    // Split query into individual words for better multi-word search
+    const queryWords = needle.split(/\s+/).filter(word => word.length > 0);
+    
     arr = arr.filter((p) => {
-      const hay = [
+      const searchableFields = [
         p.PackageIdentifier,
         p.Name,
         p.Publisher,
@@ -118,9 +121,22 @@ export function searchIndex(index, q, limit = 50, offset = 0) {
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
-      if (hay.includes(needle)) return true;
+      
+      // Check if the full query matches (original behavior)
+      if (searchableFields.includes(needle)) return true;
+      
+      // Check if each individual word matches any field
+      if (queryWords.length > 1) {
+        const allWordsMatch = queryWords.every(word => {
+          // Check if this word appears in any of the searchable fields
+          return searchableFields.includes(word);
+        });
+        if (allWordsMatch) return true;
+      }
+      
+      // Check condensed matching (original behavior)
       if (!needleCond) return false;
-      const condensed = hay.replace(/[^a-z0-9]/g, '');
+      const condensed = searchableFields.replace(/[^a-z0-9]/g, '');
       return condensed.includes(needleCond);
     });
   }

@@ -190,16 +190,45 @@ function scoreMatch(pkg, needle) {
   const name = (pkg.Name || '').toLowerCase();
   const id = (pkg.PackageIdentifier || '').toLowerCase();
   const desc = (pkg.Description || '').toLowerCase();
+  const publisher = (pkg.Publisher || '').toLowerCase();
   const needleCond = normalizeCondensed(needle);
   const nameCond = normalizeCondensed(name);
   const idCond = normalizeCondensed(id);
   const descCond = normalizeCondensed(desc);
-  // No match in any of the important fields
-  const anyDirect = name.includes(needle) || id.includes(needle) || desc.includes(needle);
+  
+  // Check for direct matches (original behavior)
+  const anyDirect = name.includes(needle) || id.includes(needle) || desc.includes(needle) || publisher.includes(needle);
+  
+  // Check for multi-word matches (new behavior)
+  const queryWords = needle.split(/\s+/).filter(word => word.length > 0);
+  let multiWordScore = 0;
+  if (queryWords.length > 1) {
+    // Check if each word appears in any field
+    const allWordsMatch = queryWords.every(word => {
+      return name.includes(word) || id.includes(word) || desc.includes(word) || publisher.includes(word);
+    });
+    if (allWordsMatch) {
+      // Calculate score based on how well each word matches
+      for (const word of queryWords) {
+        if (name.includes(word)) multiWordScore += 85;
+        if (id.includes(word)) multiWordScore += 75;
+        if (publisher.includes(word)) multiWordScore += 80;
+        if (desc.includes(word)) multiWordScore += 60;
+      }
+      // Bonus for exact field matches
+      if (publisher.includes(queryWords[0]) && name.includes(queryWords[1])) multiWordScore += 20;
+      if (name.includes(queryWords[0]) && publisher.includes(queryWords[1])) multiWordScore += 20;
+    }
+  }
+  
+  // Check condensed matching (original behavior)
   const anyCondensed = (!!needleCond && (nameCond.includes(needleCond) || idCond.includes(needleCond) || descCond.includes(needleCond)));
-  if (!anyDirect && !anyCondensed) return null;
-  let score = 0;
-  // Prioritize Name, then ID, then Description
+  
+  if (!anyDirect && !anyCondensed && multiWordScore === 0) return null;
+  
+  let score = Math.max(0, multiWordScore);
+  
+  // Prioritize Name, then ID, then Description (original scoring)
   if (name) {
     if (name.startsWith(needle)) score = Math.max(score, 100 - (name.indexOf(needle) || 0));
     else if (name.includes(needle)) score = Math.max(score, 90 - name.indexOf(needle));
