@@ -445,6 +445,42 @@ function restoreFromUrl() {
   }
 }
 
+async function hydrateSelectedFromApi() {
+  if (!state.apiBase || state.selected.size === 0) return;
+  const ids = Array.from(state.selected.keys());
+  try {
+    const updates = await Promise.all(
+      ids.map(async (id) => {
+        try {
+          const url = new URL('/api/search', state.apiBase);
+          url.searchParams.set('q', id);
+          url.searchParams.set('limit', '5');
+          const res = await fetch(url.toString());
+          if (!res.ok) return null;
+          const data = normalizeApiResults(await res.json());
+          const match = data.find((p) => (p.PackageIdentifier || '').toLowerCase() === id.toLowerCase());
+          return match ? [id, match] : null;
+        } catch {
+          return null;
+        }
+      })
+    );
+    let changed = false;
+    for (const pair of updates) {
+      if (!pair) continue;
+      const [id, pkg] = pair;
+      const prev = state.selected.get(id) || {};
+      if (pkg && (pkg.Name || '') !== (prev.Name || '')) {
+        state.selected.set(id, pkg);
+        changed = true;
+      }
+    }
+    if (changed) {
+      renderSelected();
+    }
+  } catch {}
+}
+
 function bind() {
   elements.search.addEventListener('input', debounce((e) => searchPackages(e.target.value), 250));
   elements.clearSelected.addEventListener('click', clearSelected);
@@ -456,6 +492,7 @@ async function main() {
   bind();
   await detectApiBase();
   restoreFromUrl();
+  await hydrateSelectedFromApi();
   renderSelected();
   if (state.selected.size) updateCommand();
   // Show package list by default
