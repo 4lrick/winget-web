@@ -7,8 +7,8 @@ What’s included
 ---------------
 
 - Static frontend (no build step): `index.html`, `src/app.js`, `src/style.css`.
-- Local demo dataset: `data/sample-packages.json`.
-- Uses bundled sample data (no external API required).
+- Local index dataset: `data/index.json`.
+- Uses local index data (no external API required).
 
 Running locally
 ---------------
@@ -35,7 +35,7 @@ npm start
 curl -X POST http://localhost:5173/api/sync
 ```
 
-3) Note: the frontend demo uses bundled sample data and does not call the API. You can interact with the API separately for your own integrations.
+3) Note: the frontend demo uses the local `data/index.json` and does not call the API unless available. You can interact with the API separately for your own integrations.
 
 Offline/local clone
 -------------------
@@ -82,7 +82,7 @@ Usage
 API integration
 ---------------
 
-The included server exposes endpoints you can use in your own tools or a customized frontend. The demo UI ships without API configuration and relies solely on the bundled sample dataset.
+The included server exposes endpoints you can use in your own tools or a customized frontend. The demo UI ships without API configuration and relies on the generated local index dataset.
 
 winget import schema
 --------------------

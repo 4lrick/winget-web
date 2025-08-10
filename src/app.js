@@ -35,10 +35,11 @@ function debounce(fn, ms = 250) {
 async function ensureSampleLoaded() {
   if (!state.sample.length) {
     try {
-      const res = await fetch('data/sample-packages.json');
-      state.sample = await res.json();
+      const res = await fetch('data/index.json', { cache: 'no-store' });
+      const data = await res.json();
+      state.sample = Array.isArray(data) ? data : (data.items || []);
     } catch (e) {
-      console.error('Failed to load sample data', e);
+      console.error('Failed to load local index data', e);
       state.sample = [];
     }
   }
@@ -104,7 +105,7 @@ async function searchPackages(query) {
       state.results = rankResults(normalizeApiResults(data), state.query, 50);
       state.usingSample = false;
     } catch (e) {
-      console.warn('API search failed; falling back to sample data.', e);
+      console.warn('API search failed; falling back to local index data.', e);
       state.apiBase = '';
       try { localStorage.setItem('apiBase', ''); } catch {}
       state.usingSample = true;
@@ -144,7 +145,7 @@ async function listAll(reset = false) {
       state.hasMore = items.length === limit;
       state.usingSample = false;
     } else {
-      // Use bundled sample data with simple pagination
+      // Use local index data with simple pagination
       await ensureSampleLoaded();
       const slice = state.sample.slice(offset, offset + limit);
       state.results = state.results.concat(slice.map(normalizePackage));
@@ -154,7 +155,7 @@ async function listAll(reset = false) {
   } catch (e) {
     console.warn('List all failed', e);
     if (state.apiBase) {
-      // fall back to sample if API not ready
+      // fall back to local index if API not ready
       state.apiBase = '';
       try { localStorage.setItem('apiBase', ''); } catch {}
       state.usingSample = true;
@@ -469,7 +470,7 @@ function restoreFromUrl() {
   const ids = url.searchParams.get('ids');
   if (!ids) return;
   const set = ids.split(',').filter(Boolean);
-  // Try to hydrate from sample data; unknowns become shell items
+  // Try to hydrate from local data; unknowns become shell items
   for (const id of set) {
     state.selected.set(id, { PackageIdentifier: id, Name: id });
   }
