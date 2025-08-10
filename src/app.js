@@ -5,6 +5,7 @@ const state = {
   apiBase: '',
   query: '',
   results: [],
+  rawResults: [],
   selected: new Map(), // key: PackageIdentifier, value: pkg object
   browseAll: false,
   listOffset: 0,
@@ -12,6 +13,8 @@ const state = {
   hasMore: false,
   pageSize: 5,
   searchVisibleCount: 5,
+  searchOffset: 0,
+  searchTotal: 0,
 };
 
 const elements = {
@@ -80,38 +83,21 @@ async function searchPackages(query) {
 
   if (state.apiBase) {
     try {
+      state.searchOffset = 0;
+      state.searchTotal = 0;
+      state.rawResults = [];
       const url = new URL('/api/search', state.apiBase);
       url.searchParams.set('q', state.query);
       url.searchParams.set('limit', '50');
+      url.searchParams.set('offset', String(state.searchOffset));
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      let items = normalizeApiResults(data);
-      // If no results, try condensed query (strip spaces/punctuation)
-      const condensed = normalizeCondensed(state.query);
-      if ((!items || items.length === 0) && condensed && condensed !== state.query.toLowerCase()) {
-        try {
-          const url2 = new URL('/api/search', state.apiBase);
-          url2.searchParams.set('q', condensed);
-          url2.searchParams.set('limit', '50');
-          const res2 = await fetch(url2.toString());
-          if (res2.ok) {
-            const data2 = await res2.json();
-            const items2 = normalizeApiResults(data2);
-            items = (items || []).concat(items2 || []);
-          }
-        } catch {}
-      }
-      // Deduplicate by PackageIdentifier
-      const seen = new Set();
-      const merged = [];
-      for (const p of items || []) {
-        const pid = (p.PackageIdentifier || '').toLowerCase();
-        if (!pid || seen.has(pid)) continue;
-        seen.add(pid);
-        merged.push(p);
-      }
-      state.results = rankResults(merged, state.query, 50);
+      const items = normalizeApiResults(data);
+      state.searchTotal = Number(data.total || items.length || 0);
+      state.searchOffset += items.length;
+      state.rawResults = items.slice();
+      state.results = rankResults(state.rawResults, state.query, state.rawResults.length);
     } catch (e) {
       console.warn('API search failed; no fallback (frontend requires API).', e);
       state.apiBase = '';
@@ -345,16 +331,24 @@ function renderResults() {
     c.appendChild(moreWrap);
   }
 
-  // Show more for search mode (client-side reveal)
-  if (!state.browseAll && state.results.length > state.searchVisibleCount) {
+  // Show more for search mode (reveal or fetch next page)
+  if (!state.browseAll && (state.results.length > state.searchVisibleCount || state.searchOffset < state.searchTotal)) {
     const moreWrap = document.createElement('div');
     moreWrap.style.padding = '12px';
     const btn = document.createElement('button');
     btn.className = 'btn secondary';
     btn.textContent = 'Show more';
     btn.addEventListener('click', () => {
-      state.searchVisibleCount += state.pageSize;
-      renderResults();
+      // If we've revealed all buffered results but the server has more, fetch next page first
+      if (state.searchVisibleCount >= state.results.length && state.searchOffset < state.searchTotal) {
+        searchMore().then(() => {
+          state.searchVisibleCount += state.pageSize;
+          renderResults();
+        });
+      } else {
+        state.searchVisibleCount += state.pageSize;
+        renderResults();
+      }
     });
     moreWrap.appendChild(btn);
     c.appendChild(moreWrap);
@@ -535,6 +529,34 @@ async function main() {
   bind();
   await detectApiBase();
   restoreFromUrl();
+async function searchMore() {
+  if (!state.apiBase) return;
+  if (state.searchOffset >= state.searchTotal) return;
+  try {
+    const url = new URL('/api/search', state.apiBase);
+    url.searchParams.set('q', state.query);
+    url.searchParams.set('limit', '50');
+    url.searchParams.set('offset', String(state.searchOffset));
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = normalizeApiResults(data);
+    state.searchTotal = Number(data.total || state.searchTotal);
+    state.searchOffset += items.length;
+    // Deduplicate by PackageIdentifier when appending
+    const seen = new Set(state.rawResults.map((p) => (p.PackageIdentifier || '').toLowerCase()));
+    for (const p of items) {
+      const pid = (p.PackageIdentifier || '').toLowerCase();
+      if (!pid || seen.has(pid)) continue;
+      seen.add(pid);
+      state.rawResults.push(p);
+    }
+    state.results = rankResults(state.rawResults, state.query, state.rawResults.length);
+    renderResults();
+  } catch (e) {
+    console.warn('Search more failed', e);
+  }
+}
   await hydrateSelectedFromApi();
   renderSelected();
   if (state.selected.size) updateCommand();

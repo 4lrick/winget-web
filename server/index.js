@@ -57,7 +57,8 @@ app.get('/api/search', (req, res) => {
   if (!ready) return res.status(503).json({ ok: false, error: 'Index not built. POST /api/sync first.' });
   const q = String(req.query.q || '');
   const limit = Math.min(parseInt(req.query.limit || '50', 10), 200);
-  const { total, items } = searchIndex(INDEX, q, limit, 0);
+  const offset = parseInt(req.query.offset || '0', 10);
+  const { total, items } = searchIndex(INDEX, q, limit, offset);
   res.json({ total, items });
 });
 

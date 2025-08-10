@@ -103,6 +103,7 @@ export function loadIndex() {
 
 export function searchIndex(index, q, limit = 50, offset = 0) {
   const needle = (q || '').trim().toLowerCase();
+  const needleCond = needle.replace(/[^a-z0-9]/g, '');
   let arr = index.items;
   if (needle) {
     arr = arr.filter((p) => {
@@ -117,7 +118,10 @@ export function searchIndex(index, q, limit = 50, offset = 0) {
         .filter(Boolean)
         .join(' ')
         .toLowerCase();
-      return hay.includes(needle);
+      if (hay.includes(needle)) return true;
+      if (!needleCond) return false;
+      const condensed = hay.replace(/[^a-z0-9]/g, '');
+      return condensed.includes(needleCond);
     });
   }
   const total = arr.length;
