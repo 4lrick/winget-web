@@ -32,9 +32,9 @@ h1 { margin: 0 0 6px; font-size: 28px; }
 
 .layout { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; align-items: start; }
 
-.results { min-height: 280px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
+.results { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; }
 .results .empty { color: var(--muted); padding: 16px; text-align: center; }
-.results.is-empty { display: flex; align-items: center; justify-content: center; }
+.results.is-empty { min-height: 280px; display: flex; align-items: center; justify-content: center; }
 .result-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
 .result-item:last-child { border-bottom: 0; }
 .meta { color: var(--muted); font-size: 12px; }
