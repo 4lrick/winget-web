@@ -245,6 +245,7 @@ function renderResults() {
     div.className = 'empty';
     div.textContent = 'Start typing to search packages…';
     c.appendChild(div);
+    c.classList.add('is-empty');
     return;
   }
   if (state.loadingResults && !state.results.length) {
@@ -252,6 +253,7 @@ function renderResults() {
     div.className = 'empty';
     div.textContent = 'Loading…';
     c.appendChild(div);
+    c.classList.add('is-empty');
     return;
   }
   if (!state.results.length) {
@@ -259,8 +261,10 @@ function renderResults() {
     div.className = 'empty';
     div.textContent = 'No results.';
     c.appendChild(div);
+    c.classList.add('is-empty');
     return;
   }
+  c.classList.remove('is-empty');
   const visible = state.browseAll ? state.results : state.results.slice(0, state.searchVisibleCount);
   for (const pkg of visible) {
     const item = document.createElement('div');
