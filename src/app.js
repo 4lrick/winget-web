@@ -2,6 +2,7 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 const state = {
+  apiBase: '',
   query: '',
   results: [],
   selected: new Map(), // key: PackageIdentifier, value: pkg object
@@ -41,6 +42,40 @@ async function ensureSampleLoaded() {
   }
 }
 
+async function detectApiBase() {
+  try {
+    const saved = localStorage.getItem('apiBase');
+    if (saved) {
+      state.apiBase = saved;
+      state.usingSample = !state.apiBase;
+      return;
+    }
+  } catch {}
+
+  try {
+    const isHttp = typeof location !== 'undefined' && /^https?:/i.test(location.protocol);
+    const url = typeof location !== 'undefined' ? new URL(location.href) : null;
+    const fromParam = url?.searchParams.get('api') || '';
+    const candidates = [];
+    if (fromParam) candidates.push(fromParam);
+    if (isHttp) candidates.push(location.origin);
+    for (const base of candidates) {
+      try {
+        const healthUrl = new URL('/api/health', base).toString();
+        const res = await fetch(healthUrl, { cache: 'no-store' });
+        if (res.ok) {
+          state.apiBase = base;
+          state.usingSample = false;
+          try { localStorage.setItem('apiBase', base); } catch {}
+          return;
+        }
+      } catch {}
+    }
+  } catch {}
+  state.apiBase = '';
+  state.usingSample = true;
+}
+
 async function searchPackages(query) {
   state.query = query.trim();
   if (!state.query) {
@@ -52,8 +87,28 @@ async function searchPackages(query) {
     state.browseAll = false;
   }
 
-  await ensureSampleLoaded();
-  state.results = filterSample(state.sample, state.query);
+  if (state.apiBase) {
+    try {
+      const url = new URL('/api/search', state.apiBase);
+      url.searchParams.set('q', state.query);
+      url.searchParams.set('limit', '50');
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      state.results = normalizeApiResults(data);
+      state.usingSample = false;
+    } catch (e) {
+      console.warn('API search failed; falling back to sample data.', e);
+      state.apiBase = '';
+      try { localStorage.setItem('apiBase', ''); } catch {}
+      state.usingSample = true;
+      await ensureSampleLoaded();
+      state.results = filterSample(state.sample, state.query);
+    }
+  } else {
+    await ensureSampleLoaded();
+    state.results = filterSample(state.sample, state.query);
+  }
 
   renderResults();
 }
@@ -70,14 +125,39 @@ async function listAll(reset = false) {
   state.loadingResults = true;
   renderResults();
   try {
-    // Use bundled sample data with simple pagination
-    await ensureSampleLoaded();
-    const slice = state.sample.slice(offset, offset + limit);
-    state.results = state.results.concat(slice.map(normalizePackage));
-    state.listOffset += slice.length;
-    state.hasMore = state.listOffset < state.sample.length;
+    if (state.apiBase) {
+      const url = new URL('/api/list', state.apiBase);
+      url.searchParams.set('limit', String(limit));
+      url.searchParams.set('offset', String(offset));
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const items = (Array.isArray(data) ? data : data.items) || [];
+      state.results = state.results.concat(items.map(normalizePackage));
+      state.listOffset += items.length;
+      state.hasMore = items.length === limit;
+      state.usingSample = false;
+    } else {
+      // Use bundled sample data with simple pagination
+      await ensureSampleLoaded();
+      const slice = state.sample.slice(offset, offset + limit);
+      state.results = state.results.concat(slice.map(normalizePackage));
+      state.listOffset += slice.length;
+      state.hasMore = state.listOffset < state.sample.length;
+    }
   } catch (e) {
     console.warn('List all failed', e);
+    if (state.apiBase) {
+      // fall back to sample if API not ready
+      state.apiBase = '';
+      try { localStorage.setItem('apiBase', ''); } catch {}
+      state.usingSample = true;
+      await ensureSampleLoaded();
+      const slice = state.sample.slice(offset, offset + limit);
+      state.results = state.results.concat(slice.map(normalizePackage));
+      state.listOffset += slice.length;
+      state.hasMore = state.listOffset < state.sample.length;
+    }
   }
   state.loadingResults = false;
   renderResults();
@@ -346,6 +426,7 @@ function bind() {
 
 async function main() {
   bind();
+  await detectApiBase();
   restoreFromUrl();
   renderSelected();
   if (state.selected.size) updateCommand();
