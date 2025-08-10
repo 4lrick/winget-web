@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>winget-web — Browse and Export</title>
+    <link rel="stylesheet" href="src/style.css" />
+  </head>
+  <body>
+    <header class="container">
+      <h1>winget-web</h1>
+      <p class="subtitle">Browse Windows Package Manager apps, select multiple, and export a winget import file.</p>
+    </header>
+
+    <main class="container">
+      <section class="config">
+        <details>
+          <summary>Data source</summary>
+          <div class="config-grid">
+            <label>
+              <span>API Base URL (optional)</span>
+              <input id="apiBase" type="url" placeholder="https://your-api.example.com" />
+            </label>
+            <div class="hint">Leave empty to use local sample data. Saved to localStorage.</div>
+          </div>
+        </details>
+      </section>
+
+      <section class="search">
+        <div style="display:flex; gap:8px;">
+          <input id="searchInput" type="search" placeholder="Search for apps (e.g., PowerToys, Firefox, Git)…" autocomplete="off" style="flex:1;" />
+          <button id="browseAll" class="btn secondary" title="Browse all packages">Browse All</button>
+        </div>
+      </section>
+
+      <section class="layout">
+        <div class="results" id="results">
+          <div class="empty">Start typing to search packages…</div>
+        </div>
+
+        <aside class="selected">
+          <div class="selected-header">
+            <h2>Selected (<span id="selectedCount">0</span>)</h2>
+            <button id="clearSelected" class="link" title="Clear all">Clear</button>
+          </div>
+          <ul id="selectedList" class="selected-list"></ul>
+
+          <div class="export">
+            <button id="exportJson">Export winget import JSON</button>
+            <div class="hint small">Downloads a .json you can import with winget.</div>
+            <pre class="command" id="importCommand">winget import --import-file "winstall-YYYYMMDD.json"</pre>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <footer class="container footer">
+      <span>Local demo uses sample data. Configure an API for live search.</span>
+      <a href="README.md" target="_blank" rel="noreferrer">Docs</a>
+    </footer>
+
+    <script src="src/app.js" type="module"></script>
+  </body>
+  </html>

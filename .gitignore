@@ -1,0 +1,12 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Data cache
+data/winget-pkgs/
+data/index.json
+
+# Misc
+.DS_Store
+*.log
+

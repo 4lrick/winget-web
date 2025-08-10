@@ -1,0 +1,57 @@
+[
+  {
+    "PackageIdentifier": "Microsoft.PowerToys",
+    "Name": "Microsoft PowerToys",
+    "Publisher": "Microsoft",
+    "Version": "0.80.1",
+    "Description": "A set of utilities for power users to tune and streamline their Windows experience.",
+    "Tags": ["utilities", "powertoys", "windows"],
+    "Homepage": "https://github.com/microsoft/PowerToys"
+  },
+  {
+    "PackageIdentifier": "Mozilla.Firefox",
+    "Name": "Mozilla Firefox",
+    "Publisher": "Mozilla",
+    "Version": "127.0.2",
+    "Description": "Fast, private and secure browser.",
+    "Tags": ["browser", "web", "mozilla"],
+    "Homepage": "https://www.mozilla.org/firefox/"
+  },
+  {
+    "PackageIdentifier": "Google.Chrome",
+    "Name": "Google Chrome",
+    "Publisher": "Google",
+    "Version": "126.0.0",
+    "Description": "The fast, free browser built for the modern web.",
+    "Tags": ["browser", "web", "google"],
+    "Homepage": "https://www.google.com/chrome/"
+  },
+  {
+    "PackageIdentifier": "Git.Git",
+    "Name": "Git",
+    "Publisher": "The Git Development Community",
+    "Version": "2.46.0",
+    "Description": "Distributed version control system.",
+    "Tags": ["git", "vcs", "scm"],
+    "Homepage": "https://git-scm.com/"
+  },
+  {
+    "PackageIdentifier": "VideoLAN.VLC",
+    "Name": "VLC media player",
+    "Publisher": "VideoLAN",
+    "Version": "3.0.20",
+    "Description": "Open source cross-platform multimedia player and framework.",
+    "Tags": ["media", "video", "audio", "player"],
+    "Homepage": "https://www.videolan.org/"
+  },
+  {
+    "PackageIdentifier": "7zip.7zip",
+    "Name": "7-Zip",
+    "Publisher": "Igor Pavlov",
+    "Version": "24.06",
+    "Description": "File archiver with a high compression ratio.",
+    "Tags": ["archiver", "zip", "7z"],
+    "Homepage": "https://www.7-zip.org/"
+  }
+]
+
