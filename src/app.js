@@ -12,6 +12,7 @@ const state = {
   listOffset: 0,
   loadingResults: false,
   hasMore: false,
+  pageSize: 5,
 };
 
 const elements = {
@@ -120,7 +121,7 @@ async function listAll(reset = false) {
     state.hasMore = false;
   }
   state.browseAll = true;
-  const limit = 50;
+  const limit = state.pageSize;
   const offset = state.listOffset;
   state.loadingResults = true;
   renderResults();
