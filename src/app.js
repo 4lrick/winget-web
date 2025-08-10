@@ -357,6 +357,7 @@ function buildWingetImportJson() {
           Name: 'winget',
           Argument: 'https://cdn.winget.microsoft.com/cache',
           Identifier: 'Microsoft.Winget.Source_8wekyb3d8bbwe',
+          Type: 'Microsoft.PreIndexed.Package',
         },
         Packages: packages,
       },
