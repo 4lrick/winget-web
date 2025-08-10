@@ -659,6 +659,9 @@ function handleDrop(e) {
   // Re-render and update URL
   renderSelected();
   syncUrl();
+  
+  // Update the command timestamp since order changed
+  updateCommand();
 }
 
 function handleDragEnd(e) {
