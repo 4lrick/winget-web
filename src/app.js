@@ -96,7 +96,7 @@ async function searchPackages(query) {
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      state.results = normalizeApiResults(data);
+      state.results = rankResults(normalizeApiResults(data), state.query, 50);
       state.usingSample = false;
     } catch (e) {
       console.warn('API search failed; falling back to sample data.', e);
@@ -184,25 +184,52 @@ function normalizePackage(pkg) {
   };
 }
 
+function scoreMatch(pkg, needle) {
+  const name = (pkg.Name || '').toLowerCase();
+  const id = (pkg.PackageIdentifier || '').toLowerCase();
+  const desc = (pkg.Description || '').toLowerCase();
+  // No match in any of the important fields
+  if (!name.includes(needle) && !id.includes(needle) && !desc.includes(needle)) return null;
+  let score = 0;
+  // Prioritize Name, then ID, then Description
+  if (name) {
+    if (name.startsWith(needle)) score = Math.max(score, 100 - (name.indexOf(needle) || 0));
+    else if (name.includes(needle)) score = Math.max(score, 90 - name.indexOf(needle));
+  }
+  if (id) {
+    if (id.startsWith(needle)) score = Math.max(score, 80 - (id.indexOf(needle) || 0));
+    else if (id.includes(needle)) score = Math.max(score, 70 - id.indexOf(needle));
+  }
+  if (desc && desc.includes(needle)) {
+    score = Math.max(score, 60 - desc.indexOf(needle));
+  }
+  return score;
+}
+
+function rankResults(pkgs, q, limit = 50) {
+  const needle = q.toLowerCase().trim();
+  if (!needle) return pkgs.slice(0, limit).map(normalizePackage);
+  const scored = [];
+  for (const p of pkgs) {
+    const n = normalizePackage(p);
+    const s = scoreMatch(n, needle);
+    if (s !== null) scored.push([s, n]);
+  }
+  scored.sort((a, b) => {
+    if (b[0] !== a[0]) return b[0] - a[0];
+    // Tie-breaker: alphabetical by Name then ID
+    const an = (a[1].Name || '').toLowerCase();
+    const bn = (b[1].Name || '').toLowerCase();
+    if (an !== bn) return an < bn ? -1 : 1;
+    const ai = (a[1].PackageIdentifier || '').toLowerCase();
+    const bi = (b[1].PackageIdentifier || '').toLowerCase();
+    return ai < bi ? -1 : ai > bi ? 1 : 0;
+  });
+  return scored.slice(0, limit).map((x) => x[1]);
+}
+
 function filterSample(all, q) {
-  const needle = q.toLowerCase();
-  return all
-    .filter((p) => {
-      const hay = [
-        p.PackageIdentifier,
-        p.Name,
-        p.Publisher,
-        p.Description,
-        (p.Tags || []).join(' '),
-        p.Moniker,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return hay.includes(needle);
-    })
-    .slice(0, 50)
-    .map(normalizePackage);
+  return rankResults(all, q, 50);
 }
 
 function renderResults() {
