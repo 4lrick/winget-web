@@ -468,7 +468,7 @@ function bind() {
   elements.search.addEventListener('input', debounce((e) => searchPackages(e.target.value), 250));
   elements.clearSelected.addEventListener('click', clearSelected);
   elements.exportJson.addEventListener('click', exportJson);
-  elements.browseAll.addEventListener('click', () => listAll(true));
+  elements.browseAll.addEventListener('click', () => searchPackages(elements.search.value || ''));
 }
 
 async function main() {
