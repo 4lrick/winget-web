@@ -140,6 +140,7 @@ function scoreMatch(pkg, needle) {
   const id = (pkg.PackageIdentifier || '').toLowerCase();
   const desc = (pkg.Description || '').toLowerCase();
   const publisher = (pkg.Publisher || '').toLowerCase();
+  const moniker = (pkg.Moniker || '').toLowerCase();
   const needleCond = normalizeCondensed(needle);
   const nameCond = normalizeCondensed(name);
   const idCond = normalizeCondensed(id);
@@ -257,6 +258,33 @@ function scoreMatch(pkg, needle) {
   // Special bonus for the main Steam application
   if (id === 'valve.steam' && name === 'steam') {
     score += 50; // Extra bonus for the main Steam package
+  }
+
+  // Generic boosts/penalties for base packages vs variants/locales
+  // 1) Strong boost if moniker exactly matches the query
+  if (moniker && moniker === needle) {
+    score += 120;
+  }
+  // 2) Prefer the base identifier (fewer dot segments), unless the query explicitly mentions a variant
+  const idSegments = id.split('.').filter(Boolean).length;
+  const variantWords = ['developer', 'dev', 'esr', 'beta', 'nightly', 'insider', 'preview', 'canary', 'portable', 'msix'];
+  const queryMentionsVariant = variantWords.some((w) => needle.includes(w));
+  if (!queryMentionsVariant) {
+    // Penalize longer identifiers that imply variants/locales
+    // e.g., "mozilla.firefox.developeredition.ar" (4+) should rank below "mozilla.firefox" (2)
+    const extraSegments = Math.max(0, idSegments - 2);
+    score -= extraSegments * 18; // moderate penalty per extra segment
+
+    // Additional penalty if common variant keywords appear in name/id but not in the query
+    const hasVariantKeyword = variantWords.some((w) => name.includes(w) || id.includes(w));
+    if (hasVariantKeyword) {
+      score -= 40;
+    }
+  }
+  // 3) Strong boost for the canonical package when query matches brand/product
+  // Example: prioritize "mozilla.firefox" for query "firefox"
+  if ((needle === 'firefox' || needleCond === 'firefox') && (id === 'mozilla.firefox' || moniker === 'firefox' || name === 'mozilla firefox')) {
+    score += 200;
   }
   
   return score;

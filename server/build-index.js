@@ -48,47 +48,79 @@ function buildIndex(opts = { limit: Infinity, verbose: true }) {
     throw new Error('Manifests directory not found. Did the clone succeed?');
   }
   const t0 = Date.now();
-  const items = [];
-  const seen = new Set();
-  let count = 0;
+  const byId = new Map(); // id -> best item
+  let countTouched = 0;
 
   walk(MANIFESTS_DIR, (file) => {
     const base = path.basename(file).toLowerCase();
-    const isYaml = base.endsWith('.yaml');
+    if (!base.endsWith('.yaml')) return;
     const isDefaultLocale = /defaultlocale/.test(base);
-    const isLocale = /\.locale\.[a-z0-9-]+\.yaml$/.test(base);
-    if (!isYaml || (!isDefaultLocale && !isLocale)) return;
+    const isEnUsLocale = /\.locale\.en-us\.yaml$/.test(base);
+    const isMain = !/\.locale\./.test(base) && !/\.installer\./.test(base); // e.g., Mozilla.Firefox.yaml
+    if (!(isDefaultLocale || isEnUsLocale || isMain)) return; // ignore other locales
     try {
       const raw = fs.readFileSync(file, 'utf8');
       const pkg = parseDefaultLocaleYaml(raw);
-      if (!pkg.PackageIdentifier) return;
-      if (seen.has(pkg.PackageIdentifier)) return; // keep first occurrence
-      seen.add(pkg.PackageIdentifier);
-      items.push({
-        PackageIdentifier: pkg.PackageIdentifier,
+      const id = pkg.PackageIdentifier || '';
+      const ver = pkg.PackageVersion || '';
+      if (!id) return;
+
+      const candidate = {
+        PackageIdentifier: id,
         Name: pkg.PackageName || pkg.Name || '',
         Publisher: pkg.Publisher || '',
         Moniker: pkg.Moniker || '',
-        Version: pkg.PackageVersion || '',
+        Version: ver,
         Description: pkg.ShortDescription || pkg.Description || '',
         Tags: pkg.Tags || [],
-      });
-      count++;
-      if (opts.verbose && count % 2000 === 0) {
-        process.stdout.write(`Indexed ${count}\r`);
+        __isDefaultLocale: !!isDefaultLocale,
+      };
+
+      const prev = byId.get(id);
+      if (!prev) {
+        byId.set(id, candidate);
+        countTouched++;
+      } else {
+        const cmp = compareVersions(ver, prev.Version || '0');
+        if (cmp > 0 || (cmp === 0 && candidate.__isDefaultLocale && !prev.__isDefaultLocale)) {
+          byId.set(id, candidate);
+          countTouched++;
+        }
       }
-      if (count >= opts.limit) throw new StopWalk();
+      if (opts.verbose && countTouched % 5000 === 0) {
+        process.stdout.write(`Processed ${countTouched} manifests\r`);
+      }
+      if (byId.size >= opts.limit) throw new StopWalk();
     } catch (e) {
       if (e instanceof StopWalk) throw e; // bubble up to break
       // Skip malformed files
     }
   });
 
+  const items = Array.from(byId.values()).map(({ __isDefaultLocale, ...rest }) => rest);
   items.sort((a, b) => a.PackageIdentifier.localeCompare(b.PackageIdentifier));
   const out = { generatedAt: new Date().toISOString(), total: items.length, items };
   fs.writeFileSync(INDEX_PATH, JSON.stringify(out));
   if (opts.verbose) console.log(`\nIndex built: ${items.length} packages in ${Math.round((Date.now() - t0) / 1000)}s`);
   return out;
+}
+
+function compareVersions(a, b) {
+  const sa = String(a || '').split(/[.+-]/);
+  const sb = String(b || '').split(/[.+-]/);
+  const n = Math.max(sa.length, sb.length);
+  for (let i = 0; i < n; i++) {
+    const pa = parseInt(sa[i] ?? '0', 10);
+    const pb = parseInt(sb[i] ?? '0', 10);
+    if (!Number.isNaN(pa) && !Number.isNaN(pb)) {
+      if (pa !== pb) return pa - pb;
+    } else {
+      const xa = sa[i] ?? '';
+      const xb = sb[i] ?? '';
+      if (xa !== xb) return xa < xb ? -1 : 1;
+    }
+  }
+  return 0;
 }
 
 function walk(dir, onFile) {
