@@ -1,0 +1,37 @@
+name: Update winget index
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: '17 3 * * *' # daily at 03:17 UTC
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build data/index.json
+        run: node server/build-index.js
+
+      - name: Commit updated index if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/index.json
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore(data): update index.json"
+            git push
+          fi
+

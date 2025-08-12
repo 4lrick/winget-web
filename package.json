@@ -4,12 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server/index.js",
-    "build:index": "node server/build-index.js",
-    "sync": "node server/index.js --sync-only"
+    "build:index": "node server/build-index.js"
   },
-  "dependencies": {
-    "express": "^4.19.2"
-  }
+  "dependencies": {}
 }
 

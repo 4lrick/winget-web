@@ -2,7 +2,6 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 const state = {
-  apiBase: '',
   query: '',
   results: [],
   rawResults: [],
@@ -19,6 +18,9 @@ const state = {
   searchExhausted: false,
   lastSearchPageSize: 0,
   searchVisibleIds: [],
+  // Local index support for static hosting (e.g., GitHub Pages)
+  localIndex: null, // { total, items }
+  localIndexLoaded: false,
 };
 
 const elements = {
@@ -37,38 +39,25 @@ function debounce(fn, ms = 250) {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
-// No local fallback: frontend requires API now
-
-async function detectApiBase() {
+// Local index loader for static hosting
+async function loadLocalIndex() {
+  if (state.localIndexLoaded || state.localIndex) return;
   try {
-    const saved = localStorage.getItem('apiBase');
-    if (saved) {
-      state.apiBase = saved;
-      return;
-    }
-  } catch {}
-
-  try {
-    const isHttp = typeof location !== 'undefined' && /^https?:/i.test(location.protocol);
-    const url = typeof location !== 'undefined' ? new URL(location.href) : null;
-    const fromParam = url?.searchParams.get('api') || '';
-    const candidates = [];
-    if (fromParam) candidates.push(fromParam);
-    if (isHttp) candidates.push(location.origin);
-    for (const base of candidates) {
-      try {
-        const healthUrl = new URL('/api/health', base).toString();
-        const res = await fetch(healthUrl, { cache: 'no-store' });
-        if (res.ok) {
-          state.apiBase = base;
-          try { localStorage.setItem('apiBase', base); } catch {}
-          return;
-        }
-      } catch {}
-    }
-  } catch {}
-  state.apiBase = '';
+    const res = await fetch('./data/index.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    // Normalize items minimally to expected shape
+    const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
+    state.localIndex = { total: items.length, items };
+    state.localIndexLoaded = true;
+  } catch (e) {
+    console.warn('Failed to load local index (data/index.json).', e);
+    state.localIndex = { total: 0, items: [] };
+    state.localIndexLoaded = true;
+  }
 }
+
+// No API: static hosting only
 
 async function searchPackages(query) {
   state.query = query.trim();
@@ -86,39 +75,17 @@ async function searchPackages(query) {
     state.searchVisibleIds = [];
   }
 
-  if (state.apiBase) {
-    try {
-      state.searchOffset = 0;
-      state.searchTotal = 0;
-      state.rawResults = [];
-      state.searchExhausted = false;
-      const url = new URL('/api/search', state.apiBase);
-      url.searchParams.set('q', state.query);
-      url.searchParams.set('limit', '50');
-      url.searchParams.set('offset', String(state.searchOffset));
-      const res = await fetch(url.toString());
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const items = normalizeApiResults(data);
-      state.searchTotal = Number(data.total || items.length || 0);
-      state.searchOffset += items.length;
-      state.lastSearchPageSize = items.length;
-      if (items.length === 0) {
-        // Prevent infinite "Show more" when API yields no further items
-        state.searchOffset = state.searchTotal;
-        state.searchExhausted = true;
-      }
-      state.rawResults = items.slice();
-      state.results = rankResults(state.rawResults, state.query, state.rawResults.length);
-    } catch (e) {
-      console.warn('API search failed; no fallback (frontend requires API).', e);
-      state.apiBase = '';
-      try { localStorage.setItem('apiBase', ''); } catch {}
-      state.results = [];
-    }
-  } else {
-    // No API configured; no results
-    state.results = [];
+  {
+    // Static mode: search in local index
+    await loadLocalIndex();
+    const all = state.localIndex?.items || [];
+    // Rank across entire index; reveal with Show more
+    state.rawResults = all;
+    state.results = rankResults(all, state.query, all.length);
+    state.searchTotal = state.results.length;
+    state.searchOffset = state.searchTotal; // no server paging
+    state.lastSearchPageSize = state.results.length;
+    state.searchExhausted = true;
   }
 
   renderResults();
@@ -135,41 +102,23 @@ async function listAll(reset = false) {
   const offset = state.listOffset;
   state.loadingResults = true;
   renderResults();
+  // Static mode: list from local index
   try {
-    if (state.apiBase) {
-      const url = new URL('/api/list', state.apiBase);
-      url.searchParams.set('limit', String(limit));
-      url.searchParams.set('offset', String(offset));
-      const res = await fetch(url.toString());
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const items = (Array.isArray(data) ? data : data.items) || [];
-      state.results = state.results.concat(items.map(normalizePackage));
-      state.listOffset += items.length;
-      state.hasMore = items.length === limit;
-    } else {
-      // No API configured; nothing to list
-      state.hasMore = false;
-    }
+    await loadLocalIndex();
+    const all = (state.localIndex?.items || []).map(normalizePackage);
+    const slice = all.slice(offset, offset + limit);
+    state.results = state.results.concat(slice);
+    state.listOffset += slice.length;
+    state.hasMore = offset + slice.length < all.length;
   } catch (e) {
     console.warn('List all failed', e);
-    if (state.apiBase) {
-      // No fallback: clear API and stop listing
-      state.apiBase = '';
-      try { localStorage.setItem('apiBase', ''); } catch {}
-      state.hasMore = false;
-    }
+    state.hasMore = false;
   }
   state.loadingResults = false;
   renderResults();
 }
 
-function normalizeApiResults(data) {
-  // Expected shape: array of packages with at least PackageIdentifier and Name
-  if (Array.isArray(data)) return data.map(normalizePackage);
-  if (Array.isArray(data.items)) return data.items.map(normalizePackage);
-  return [];
-}
+// No API results normalization needed in static mode
 
 function normalizePackage(pkg) {
   return {
@@ -339,50 +288,10 @@ function rankResults(pkgs, q, limit = 50) {
 
 // Top-level search pagination helper used by the UI button
 async function fetchMoreSearch() {
-  if (!state.apiBase) return;
-  if (state.searchOffset >= state.searchTotal || state.searchingMore || state.searchExhausted) return;
-  state.searchingMore = true;
-  try {
-    let added = 0;
-    let safety = 0;
-    while (state.searchOffset < state.searchTotal && added === 0 && safety < 5) {
-      const url = new URL('/api/search', state.apiBase);
-      url.searchParams.set('q', state.query);
-      url.searchParams.set('limit', '50');
-      url.searchParams.set('offset', String(state.searchOffset));
-      const res = await fetch(url.toString());
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const items = normalizeApiResults(data);
-      state.searchTotal = Number(data.total || state.searchTotal);
-      state.searchOffset += items.length;
-      state.lastSearchPageSize = items.length;
-      if (items.length === 0) {
-        state.searchOffset = state.searchTotal;
-        state.searchExhausted = true;
-        break;
-      }
-      const seen = new Set(state.rawResults.map((p) => (p.PackageIdentifier || '').toLowerCase()));
-      for (const p of items) {
-        const pid = (p.PackageIdentifier || '').toLowerCase();
-        if (!pid || seen.has(pid)) continue;
-        seen.add(pid);
-        state.rawResults.push(p);
-        added++;
-      }
-      safety++;
-    }
-    if (added === 0) {
-      state.searchOffset = state.searchTotal;
-      state.searchExhausted = true;
-    }
-    state.results = rankResults(state.rawResults, state.query, state.rawResults.length);
-    renderResults();
-  } catch (e) {
-    console.warn('Search more failed', e);
-  } finally {
-    state.searchingMore = false;
-  }
+  // Static mode: we already have ranked results in memory.
+  // Just reveal more of them by increasing the visible count; nothing to fetch.
+  state.searchVisibleCount += state.pageSize;
+  renderResults();
 }
 
 function renderResults() {
@@ -760,39 +669,20 @@ function restoreFromUrl() {
 }
 
 async function hydrateSelectedFromApi() {
-  if (!state.apiBase || state.selected.size === 0) return;
-  const ids = Array.from(state.selected.keys());
-  try {
-    const updates = await Promise.all(
-      ids.map(async (id) => {
-        try {
-          const url = new URL('/api/search', state.apiBase);
-          url.searchParams.set('q', id);
-          url.searchParams.set('limit', '5');
-          const res = await fetch(url.toString());
-          if (!res.ok) return null;
-          const data = normalizeApiResults(await res.json());
-          const match = data.find((p) => (p.PackageIdentifier || '').toLowerCase() === id.toLowerCase());
-          return match ? [id, match] : null;
-        } catch {
-          return null;
-        }
-      })
-    );
-    let changed = false;
-    for (const pair of updates) {
-      if (!pair) continue;
-      const [id, pkg] = pair;
-      const prev = state.selected.get(id) || {};
-      if (pkg && (pkg.Name || '') !== (prev.Name || '')) {
-        state.selected.set(id, pkg);
-        changed = true;
-      }
+  if (state.selected.size === 0) return;
+  // Static hydration only (no API)
+  // Static hydration: use local index
+  await loadLocalIndex();
+  const map = new Map((state.localIndex?.items || []).map((p) => [String(p.PackageIdentifier || '').toLowerCase(), normalizePackage(p)]));
+  let changed = false;
+  for (const id of Array.from(state.selected.keys())) {
+    const pkg = map.get(id.toLowerCase());
+    if (pkg) {
+      state.selected.set(id, pkg);
+      changed = true;
     }
-    if (changed) {
-      renderSelected();
-    }
-  } catch {}
+  }
+  if (changed) renderSelected();
 }
 
 function bind() {
@@ -804,56 +694,9 @@ function bind() {
 
 async function main() {
   bind();
-  await detectApiBase();
+  // Static: proactively load the local index
+  await loadLocalIndex();
   restoreFromUrl();
-async function searchMore() {
-  if (!state.apiBase) return;
-  if (state.searchOffset >= state.searchTotal || state.searchingMore || state.searchExhausted) return;
-  state.searchingMore = true;
-  try {
-    let added = 0;
-    let safety = 0;
-    while (state.searchOffset < state.searchTotal && added === 0 && safety < 5) {
-      const url = new URL('/api/search', state.apiBase);
-      url.searchParams.set('q', state.query);
-      url.searchParams.set('limit', '50');
-      url.searchParams.set('offset', String(state.searchOffset));
-      const res = await fetch(url.toString());
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      const items = normalizeApiResults(data);
-      state.searchTotal = Number(data.total || state.searchTotal);
-      state.searchOffset += items.length;
-      state.lastSearchPageSize = items.length;
-      if (items.length === 0) {
-        // Exhausted
-        state.searchOffset = state.searchTotal;
-        state.searchExhausted = true;
-        break;
-      }
-      const seen = new Set(state.rawResults.map((p) => (p.PackageIdentifier || '').toLowerCase()));
-      for (const p of items) {
-        const pid = (p.PackageIdentifier || '').toLowerCase();
-        if (!pid || seen.has(pid)) continue;
-        seen.add(pid);
-        state.rawResults.push(p);
-        added++;
-      }
-      safety++;
-    }
-    if (added === 0) {
-      // No new unique results found after fetching; mark exhausted
-      state.searchOffset = state.searchTotal;
-      state.searchExhausted = true;
-    }
-    state.results = rankResults(state.rawResults, state.query, state.rawResults.length);
-    renderResults();
-  } catch (e) {
-    console.warn('Search more failed', e);
-  } finally {
-    state.searchingMore = false;
-  }
-}
   await hydrateSelectedFromApi();
   renderSelected();
   if (state.selected.size) updateCommand();
