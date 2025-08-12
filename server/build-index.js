@@ -8,178 +8,130 @@ const REPO_DIR = path.join(DATA_DIR, 'winget-pkgs');
 const MANIFESTS_DIR = path.join(REPO_DIR, 'manifests');
 const INDEX_PATH = path.join(DATA_DIR, 'index.json');
 
-function ensureDataDirs() {
+function ensureRepo() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-function ensureRepo(opts = { verbose: true, offline: false }) {
-  ensureDataDirs();
   if (!fs.existsSync(REPO_DIR)) {
-    if (opts.verbose) console.log('Cloning winget-pkgs (shallow)…');
-    if (opts.offline) {
-      throw new Error('Offline mode: repository does not exist locally. Place a clone at ' + REPO_DIR);
-    }
     execSync(`git clone --depth 1 ${REPO_URL} ${REPO_DIR}`, { stdio: 'inherit' });
   } else {
-    if (opts.offline) {
-      if (opts.verbose) console.log('Offline mode: skipping git update for winget-pkgs');
-      return;
-    }
-    if (opts.verbose) console.log('Updating winget-pkgs…');
-    try {
-      execSync(`git -C ${REPO_DIR} pull --ff-only`, { stdio: 'inherit' });
-    } catch (e) {
-      console.warn('git pull failed, attempting hard reset to origin');
-      try {
-        execSync(`git -C ${REPO_DIR} fetch --depth 1 --all`, { stdio: 'inherit' });
-        // try main then master
-        try { execSync(`git -C ${REPO_DIR} reset --hard origin/main`, { stdio: 'inherit' }); }
-        catch { execSync(`git -C ${REPO_DIR} reset --hard origin/master`, { stdio: 'inherit' }); }
-      } catch (e2) {
-        console.error('Failed to refresh repo:', e2.message);
-        throw e2;
-      }
-    }
+    execSync(`git -C ${REPO_DIR} fetch --depth 1 origin`, { stdio: 'inherit' });
+    execSync(`git -C ${REPO_DIR} reset --hard origin/HEAD`, { stdio: 'inherit' });
   }
 }
 
-function buildIndex(opts = { limit: Infinity, verbose: true }) {
-  if (!fs.existsSync(MANIFESTS_DIR)) {
-    throw new Error('Manifests directory not found. Did the clone succeed?');
-  }
-  const t0 = Date.now();
-  const byId = new Map(); // id -> best item
-  let countTouched = 0;
+function buildIndex() {
+  if (!fs.existsSync(MANIFESTS_DIR)) throw new Error('Manifests directory not found.');
+  const packageIdToBestItem = new Map();
 
-  walk(MANIFESTS_DIR, (file) => {
-    const base = path.basename(file).toLowerCase();
-    if (!base.endsWith('.yaml')) return;
-    const isDefaultLocale = /defaultlocale/.test(base);
-    const isEnUsLocale = /\.locale\.en-us\.yaml$/.test(base);
-    const isMain = !/\.locale\./.test(base) && !/\.installer\./.test(base); // e.g., Mozilla.Firefox.yaml
-    if (!(isDefaultLocale || isEnUsLocale || isMain)) return; // ignore other locales
-    try {
-      const raw = fs.readFileSync(file, 'utf8');
-      const pkg = parseDefaultLocaleYaml(raw);
-      const id = pkg.PackageIdentifier || '';
-      const ver = pkg.PackageVersion || '';
-      if (!id) return;
+  traverseDirectoryFiles(MANIFESTS_DIR, (filePath) => {
+    const manifestBaseName = path.basename(filePath).toLowerCase();
+    if (!manifestBaseName.endsWith('.yaml')) return;
+    const fileContents = fs.readFileSync(filePath, 'utf8');
+    const basics = parseManifestBasics(fileContents);
+    if (!basics.id) return;
+    if (basics.type && basics.type !== 'defaultlocale' && basics.type !== 'version') return;
 
-      const candidate = {
-        PackageIdentifier: id,
-        Name: pkg.PackageName || pkg.Name || '',
-        Publisher: pkg.Publisher || '',
-        Moniker: pkg.Moniker || '',
-        Version: ver,
-        Description: pkg.ShortDescription || pkg.Description || '',
-        Tags: pkg.Tags || [],
-        __isDefaultLocale: !!isDefaultLocale,
+    if (basics.type === 'defaultlocale') {
+      const meta = parseDefaultLocaleYaml(fileContents);
+      const candidateItem = {
+        PackageIdentifier: basics.id,
+        Name: meta.PackageName || meta.Name || '',
+        Publisher: meta.Publisher || '',
+        Moniker: meta.Moniker || '',
+        Version: basics.version || meta.PackageVersion || '',
+        Description: meta.ShortDescription || meta.Description || '',
+        Tags: meta.Tags || [],
+        __isDefaultLocale: true,
       };
+      chooseBestPackageItem(packageIdToBestItem, candidateItem);
+      return;
+    }
 
-      const prev = byId.get(id);
-      if (!prev) {
-        byId.set(id, candidate);
-        countTouched++;
-      } else {
-        const cmp = compareVersions(ver, prev.Version || '0');
-        if (cmp > 0 || (cmp === 0 && candidate.__isDefaultLocale && !prev.__isDefaultLocale)) {
-          byId.set(id, candidate);
-          countTouched++;
-        }
-      }
-      if (opts.verbose && countTouched % 5000 === 0) {
-        process.stdout.write(`Processed ${countTouched} manifests\r`);
-      }
-      if (byId.size >= opts.limit) throw new StopWalk();
-    } catch (e) {
-      if (e instanceof StopWalk) throw e; // bubble up to break
-      // Skip malformed files
+    if (basics.type === 'version' || !basics.type) {
+      const candidateItem = {
+        PackageIdentifier: basics.id,
+        Name: '',
+        Publisher: '',
+        Moniker: '',
+        Version: basics.version || '',
+        Description: '',
+        Tags: [],
+        __isDefaultLocale: false,
+      };
+      chooseBestPackageItem(packageIdToBestItem, candidateItem);
+      return;
     }
   });
 
-  const items = Array.from(byId.values()).map(({ __isDefaultLocale, ...rest }) => rest);
-  items.sort((a, b) => a.PackageIdentifier.localeCompare(b.PackageIdentifier));
-  const out = { generatedAt: new Date().toISOString(), total: items.length, items };
-  fs.writeFileSync(INDEX_PATH, JSON.stringify(out));
-  if (opts.verbose) console.log(`\nIndex built: ${items.length} packages in ${Math.round((Date.now() - t0) / 1000)}s`);
-  return out;
+  const packages = Array.from(packageIdToBestItem.values()).map(({ __isDefaultLocale, ...rest }) => rest);
+  packages.sort((a, b) => a.PackageIdentifier.localeCompare(b.PackageIdentifier));
+  const indexOutput = { generatedAt: new Date().toISOString(), total: packages.length, items: packages };
+  fs.writeFileSync(INDEX_PATH, JSON.stringify(indexOutput));
+  return indexOutput;
 }
 
-function compareVersions(a, b) {
-  const sa = String(a || '').split(/[.+-]/);
-  const sb = String(b || '').split(/[.+-]/);
-  const n = Math.max(sa.length, sb.length);
-  for (let i = 0; i < n; i++) {
-    const pa = parseInt(sa[i] ?? '0', 10);
-    const pb = parseInt(sb[i] ?? '0', 10);
-    if (!Number.isNaN(pa) && !Number.isNaN(pb)) {
-      if (pa !== pb) return pa - pb;
+function chooseBestPackageItem(packageIdToBestItem, candidateItem) {
+  const packageIdentifier = candidateItem.PackageIdentifier || '';
+  const previousItem = packageIdToBestItem.get(packageIdentifier);
+  if (!previousItem) {
+    packageIdToBestItem.set(packageIdentifier, candidateItem);
+    return;
+  }
+  const versionCompare = compareVersions(candidateItem.Version, previousItem.Version || '0');
+  const preferDefaultLocale = candidateItem.__isDefaultLocale && !previousItem.__isDefaultLocale;
+  if (versionCompare > 0 || (versionCompare === 0 && preferDefaultLocale)) {
+    packageIdToBestItem.set(packageIdentifier, candidateItem);
+  }
+}
+
+function traverseDirectoryFiles(startDirectoryPath, onFile) {
+  const pendingDirectories = [startDirectoryPath];
+  while (pendingDirectories.length) {
+    const currentDirectoryPath = pendingDirectories.pop();
+  const entries = fs
+    .readdirSync(currentDirectoryPath, { withFileTypes: true })
+    .sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const entryPath = path.join(currentDirectoryPath, entry.name);
+      if (entry.isDirectory()) pendingDirectories.push(entryPath);
+      else if (entry.isFile()) onFile(entryPath);
+    }
+  }
+}
+
+function compareVersions(versionA, versionB) {
+  const partsA = String(versionA || '').split(/[.+-]/);
+  const partsB = String(versionB || '').split(/[.+-]/);
+  const maxLen = Math.max(partsA.length, partsB.length);
+  for (let partIndex = 0; partIndex < maxLen; partIndex++) {
+    const numA = parseInt(partsA[partIndex] ?? '0', 10);
+    const numB = parseInt(partsB[partIndex] ?? '0', 10);
+    if (!Number.isNaN(numA) && !Number.isNaN(numB)) {
+      if (numA !== numB) return numA - numB;
     } else {
-      const xa = sa[i] ?? '';
-      const xb = sb[i] ?? '';
-      if (xa !== xb) return xa < xb ? -1 : 1;
+      const strA = partsA[partIndex] ?? '';
+      const strB = partsB[partIndex] ?? '';
+      if (strA !== strB) return strA < strB ? -1 : 1;
     }
   }
   return 0;
 }
 
-function walk(dir, onFile) {
-  const stack = [dir];
-  while (stack.length) {
-    const d = stack.pop();
-    const entries = fs.readdirSync(d, { withFileTypes: true });
-    for (const ent of entries) {
-      const p = path.join(d, ent.name);
-      if (ent.isDirectory()) stack.push(p);
-      else if (ent.isFile()) onFile(p);
-    }
-  }
-}
+function parseDefaultLocaleYaml(fileText) {
+  const fileLines = fileText.split(/\r?\n/);
+  const parsed = {};
 
-class StopWalk extends Error {}
-
-function unquote(v) {
-  if (typeof v !== 'string') return v;
-  const s = v.trim();
-  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith('\'') && s.endsWith('\''))) return s.slice(1, -1);
-  return s;
-}
-
-function parseDefaultLocaleYaml(text) {
-  const lines = text.split(/\r?\n/);
-  const out = {};
-
-  const getScalar = (key) => {
-    const re = new RegExp(`^${key}:(.*)$`, 'i');
-    for (const line of lines) {
-      const m = line.match(re);
-      if (m) return unquote(m[1]).trim();
-    }
-    return '';
-  };
+  const extractFieldValue = (fieldName) => extractFieldValueFromLines(fileLines, fieldName);
 
   const parseTags = () => {
-    // Find start
-    let i = lines.findIndex((l) => /^Tags\s*:/i.test(l));
-    if (i === -1) return [];
-    const line = lines[i];
-    const after = line.split(':')[1] || '';
-    // Inline array
-    if (after.includes('[')) {
-      const inside = after.substring(after.indexOf('[') + 1, after.indexOf(']'));
-      return inside
-        .split(',')
-        .map((s) => unquote(s).trim())
-        .filter(Boolean);
-    }
-    // Block list
+    const startIndex = fileLines.findIndex((lineText) => /^\s*Tags\s*:/.test(lineText));
+    if (startIndex === -1) return [];
     const tags = [];
-    for (let j = i + 1; j < lines.length; j++) {
-      const l = lines[j];
-      if (/^\s*-\s*/.test(l)) {
-        const val = l.replace(/^\s*-\s*/, '');
-        tags.push(unquote(val).trim());
-      } else if (/^\s*$/.test(l)) {
+    for (let lineIndex = startIndex + 1; lineIndex < fileLines.length; lineIndex++) {
+      const lineText = fileLines[lineIndex];
+      if (/^\s*-\s*/.test(lineText)) {
+        const valueText = lineText.replace(/^\s*-\s*/, '').trim();
+        tags.push(valueText);
+      } else if (/^\s*$/.test(lineText)) {
         continue;
       } else {
         break;
@@ -188,17 +140,33 @@ function parseDefaultLocaleYaml(text) {
     return tags.filter(Boolean);
   };
 
-  out.PackageIdentifier = getScalar('PackageIdentifier');
-  out.PackageName = getScalar('PackageName') || getScalar('Name');
-  out.Publisher = getScalar('Publisher');
-  out.Moniker = getScalar('Moniker');
-  out.ShortDescription = getScalar('ShortDescription');
-  out.Description = getScalar('Description');
-  out.PackageVersion = getScalar('PackageVersion');
-  out.Tags = parseTags();
-  return out;
+  parsed.PackageIdentifier = extractFieldValue('PackageIdentifier');
+  parsed.PackageName = extractFieldValue('PackageName') || extractFieldValue('Name');
+  parsed.Publisher = extractFieldValue('Publisher');
+  parsed.Moniker = extractFieldValue('Moniker');
+  parsed.ShortDescription = extractFieldValue('ShortDescription');
+  parsed.Description = extractFieldValue('Description');
+  parsed.PackageVersion = extractFieldValue('PackageVersion');
+  parsed.Tags = parseTags();
+  return parsed;
 }
 
-const offline = process.env.OFFLINE === '1';
-ensureRepo({ verbose: true, offline });
-buildIndex({ verbose: true });
+function extractFieldValueFromLines(fileLines, fieldName) {
+  const fieldRegex = new RegExp(`^\\s*${fieldName}\\s*:\\s*(.*)$`);
+  for (const lineText of fileLines) {
+    const match = lineText.match(fieldRegex);
+    if (match) return match[1].trim();
+  }
+  return '';
+}
+
+function parseManifestBasics(fileText) {
+  const lines = fileText.split(/\r?\n/);
+  const type = (extractFieldValueFromLines(lines, 'ManifestType') || '').toLowerCase();
+  const id = extractFieldValueFromLines(lines, 'PackageIdentifier') || '';
+  const version = extractFieldValueFromLines(lines, 'PackageVersion') || '';
+  return { type, id, version };
+}
+
+ensureRepo();
+buildIndex();
