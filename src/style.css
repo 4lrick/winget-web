@@ -37,6 +37,37 @@ h1 { margin: 0 0 6px; font-size: 28px; }
 .results.is-empty { min-height: 280px; display: flex; align-items: center; justify-content: center; }
 .result-item { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
 .result-item:last-child { border-bottom: 0; }
+.select-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background-color: var(--panel-2);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 0; /* animated in on check */
+  display: inline-block;
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease, background-size 120ms ease;
+}
+
+.select-checkbox:hover { border-color: #3b82f680; }
+
+.select-checkbox:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.35);
+}
+
+.select-checkbox:checked {
+  background-color: var(--brand);
+  border-color: var(--brand);
+  /* inline white checkmark centered */
+  background-image: url('data:image/svg+xml;charset=UTF-8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 9 9" fill="white"><rect x="0" y="4.3" transform="matrix(-0.707 -0.7072 0.7072 -0.707 0.5891 10.4702)" width="4.3" height="1.6" /><rect x="2.2" y="2.9" transform="matrix(-0.7071 0.7071 -0.7071 -0.7071 12.1877 2.9833)" width="6.1" height="1.7" /></svg>');
+  background-size: 12px 12px;
+
+}
 .meta { color: var(--muted); font-size: 12px; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .tag { font-size: 11px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--border); padding: 2px 6px; border-radius: 999px; }
@@ -50,6 +81,8 @@ h1 { margin: 0 0 6px; font-size: 28px; }
 
 .selected { position: sticky; top: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: grid; align-content: start; gap: 8px; }
 .selected-header { display: flex; align-items: center; justify-content: space-between; }
+.selected-header #clearSelected { display: inline-flex; align-items: center; justify-content: center; padding: 4px; }
+.selected-header #clearSelected svg { width: 18px; height: 18px; }
 .selected-list { list-style: none; margin: 12px 0; padding: 0; max-height: 380px; overflow: auto; border: 1px dashed var(--border); border-radius: 8px; }
 .selected-item { display: grid; grid-template-columns: 32px 1fr auto; gap: 8px; padding: 8px 10px; border-bottom: 1px dashed var(--border); cursor: move; }
 .selected-item:last-child { border-bottom: 0; }
@@ -106,7 +139,16 @@ h1 { margin: 0 0 6px; font-size: 28px; }
 }
 
 .export { display: grid; gap: 8px; align-items: center; }
-.export-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; align-items: center; }
+.export-actions { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; }
+/* Make the copy button more compact */
+#copyPs1 {
+  padding: 8px 10px; /* keep same vertical size as other buttons */
+  justify-self: end; /* don't stretch horizontally */
+  width: max-content; /* shrink to fit label */
+  align-self: stretch; /* match the row height */
+}
+
+#copyPs1 svg { display: block; width: 16px; height: 16px; }
 .command { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); padding: 10px; border-radius: 8px; margin: 0; font-size: 12px; }
 
 @media (max-width: 900px) {

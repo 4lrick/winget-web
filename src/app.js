@@ -407,21 +407,17 @@ function renderResults() {
     }
 
     const right = document.createElement('div');
-    const btn = document.createElement('button');
-    const setBtnState = () => {
-      const already = state.selected.has(pkg.PackageIdentifier);
-      btn.className = already ? 'btn ok' : 'btn secondary';
-      btn.textContent = already ? 'Selected ✓' : 'Select';
-      btn.setAttribute('aria-pressed', already ? 'true' : 'false');
-    };
-    setBtnState();
-    btn.addEventListener('click', () => {
-      const exists = state.selected.has(pkg.PackageIdentifier);
-      if (exists) removeSelected(pkg.PackageIdentifier);
-      else addSelected(pkg);
-      setBtnState();
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'select-checkbox';
+    cb.checked = state.selected.has(pkg.PackageIdentifier);
+    cb.setAttribute('aria-label', cb.checked ? 'Deselect' : 'Select');
+    cb.addEventListener('change', () => {
+      if (cb.checked) addSelected(pkg);
+      else removeSelected(pkg.PackageIdentifier);
+      renderResults();
     });
-    right.appendChild(btn);
+    right.appendChild(cb);
 
     item.appendChild(left);
     item.appendChild(right);
@@ -743,9 +739,13 @@ function bind() {
     const ps1 = buildInstallPs1();
     try {
       await navigator.clipboard.writeText(ps1);
-      const prev = elements.copyPs1.textContent;
-      elements.copyPs1.textContent = 'Copied!';
-      setTimeout(() => (elements.copyPs1.textContent = prev), 1000);
+      const prevHtml = elements.copyPs1.innerHTML;
+      elements.copyPs1.disabled = true;
+      elements.copyPs1.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 16.2l-3.5-3.5-1.4 1.4L9 19 20.9 7.1l-1.4-1.4z"/></svg>';
+      setTimeout(() => {
+        elements.copyPs1.innerHTML = prevHtml;
+        elements.copyPs1.disabled = false;
+      }, 1000);
     } catch {
       alert('Copy failed. Your browser may not permit clipboard access.');
     }
