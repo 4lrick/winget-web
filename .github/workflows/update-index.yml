@@ -3,7 +3,7 @@ name: Update winget-export index
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: '17 3 * * *' # daily at 03:17 UTC
+    - cron: '0 0 * * *'
 
 permissions:
   contents: write
