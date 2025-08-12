@@ -626,7 +626,7 @@ function buildTimestampedFilename() {
   const seconds = String(now.getSeconds()).padStart(2, '0');
   
   const ts = `${year}${month}${day}-${hours}${minutes}${seconds}`;
-  return `winget-web-${ts}.json`;
+  return `winget-export-${ts}.json`;
 }
 
 function exportJson() {
@@ -642,7 +642,7 @@ function exportJson() {
 
 function updateCommand() {
   if (state.selected.size === 0) {
-    elements.importCommand.textContent = 'winget import --import-file "winget-web-YYYYMMDD.json"';
+    elements.importCommand.textContent = 'winget import --import-file "winget-export-YYYYMMDD.json"';
     return;
   }
   const filename = buildTimestampedFilename();

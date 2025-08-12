@@ -1,4 +1,4 @@
-name: Update winget index
+name: Update winget-export index
 
 on:
   workflow_dispatch: {}

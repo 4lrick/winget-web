@@ -1,9 +1,9 @@
-winget-web
+winget-export
 ===========
 
 Static web UI to search winget packages, select multiple, and export a JSON you can import with:
 
-`winget import --import-file "winget-web-YYYYMMDD-HHMMSS.json"`
+`winget import --import-file "winget-export-YYYYMMDD-HHMMSS.json"`
 
 How it works
 ------------
