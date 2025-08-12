@@ -30,6 +30,8 @@ const elements = {
   selectedCount: $('#selectedCount'),
   clearSelected: $('#clearSelected'),
   exportJson: $('#exportJson'),
+  exportPs1: $('#exportPs1'),
+  copyPs1: $('#copyPs1'),
   importCommand: $('#importCommand'),
   browseAll: $('#browseAll'),
 };
@@ -644,6 +646,12 @@ function download(filename, dataStr, mime = 'application/json') {
   URL.revokeObjectURL(url);
 }
 
+function buildInstallPs1() {
+  const ids = Array.from(state.selected.keys());
+  const parts = ids.map((id) => `winget install -e --id ${id}`);
+  return parts.join(';');
+}
+
 function buildTimestampedFilename() {
   const now = new Date();
   const year = now.getFullYear();
@@ -717,6 +725,31 @@ function bind() {
   elements.search.addEventListener('input', debounce((e) => searchPackages(e.target.value), 250));
   elements.clearSelected.addEventListener('click', clearSelected);
   elements.exportJson.addEventListener('click', exportJson);
+  elements.exportPs1.addEventListener('click', () => {
+    if (state.selected.size === 0) {
+      alert('No packages selected.');
+      return;
+    }
+    const ps1 = buildInstallPs1();
+    const jsonName = buildTimestampedFilename();
+    const ps1Name = jsonName.replace(/\.json$/i, '.ps1');
+    download(ps1Name, ps1, 'application/x-powershell');
+  });
+  elements.copyPs1.addEventListener('click', async () => {
+    if (state.selected.size === 0) {
+      alert('No packages selected.');
+      return;
+    }
+    const ps1 = buildInstallPs1();
+    try {
+      await navigator.clipboard.writeText(ps1);
+      const prev = elements.copyPs1.textContent;
+      elements.copyPs1.textContent = 'Copied!';
+      setTimeout(() => (elements.copyPs1.textContent = prev), 1000);
+    } catch {
+      alert('Copy failed. Your browser may not permit clipboard access.');
+    }
+  });
   elements.browseAll.addEventListener('click', () => searchPackages(elements.search.value || ''));
 }
 

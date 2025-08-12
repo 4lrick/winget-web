@@ -33,8 +33,12 @@
           <ul id="selectedList" class="selected-list"></ul>
 
           <div class="export">
-            <button id="exportJson" class="btn">Export winget import JSON</button>
-            <div class="hint small">Downloads a .json you can import with winget.</div>
+            <div class="export-actions">
+              <button id="exportJson" class="btn">Export JSON</button>
+              <button id="exportPs1" class="btn">Export PS1</button>
+              <button id="copyPs1" class="btn secondary" title="Copy command to clipboard">Copy</button>
+            </div>
+            <div class="hint small">Download a JSON (for winget import) or a PowerShell script to install selected packages.</div>
             <pre class="command" id="importCommand">winget import --import-file "winget-export-YYYYMMDD.json"</pre>
           </div>
         </aside>
